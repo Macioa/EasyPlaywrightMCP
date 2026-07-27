@@ -32,6 +32,16 @@ export const SERVER_INSTRUCTIONS = `EasyPlaywrightMCP — LLM-driven Playwright 
 5. Review MD orchestration logs
 6. compile_demo — narrated H.264 MP4 (edge-tts + minterpolate splice)
 
+## Demo interaction style
+Treat demos as ad creatives: short, direct, no filler, trim dead time.
+- Cursor: prefer speed "fast" (~8 steps). Use "timed" only with SHORT windows (endMs−startMs ≈ 300–600). Avoid "slow".
+- Typing (demos): always fill=false so pressSequentially runs at delay 8 (live keystrokes). Never set fill=true when recording.
+- Testing-only: fill=true is fine when video quality does not matter.
+- Timing: each orchestrate_session call starts its own clock at 0. Always start near startMs=0; keep ~100–300ms gaps between actions. Never continue a prior batch timeline (e.g. startMs: 12300) — that inserts long sleeps.
+- Avoid long wait actions; dwell ≤300–500ms only when a result must be visible.
+- Scroll sparingly: scroll into view / short rAF scroll; no scenic pans.
+- Batch related actions in one orchestrate_session call when possible.
+
 Capture recipe: synthetic cursor, 1920×1080 deviceScaleFactor 2, WebM→H.264 60fps minterpolate, smooth rAF scroll.
 Narration: Microsoft Edge neural TTS via edge-tts (default en-US-AndrewNeural +10%).
 
@@ -107,8 +117,10 @@ Example: { "sessionId": "sess_01HXYZ" }`,
 
   server.tool(
     "orchestrate_session",
-    `Execute ordered tap/cursor/keyboard actions with timed cursor motion.
+    `Execute ordered tap/cursor/keyboard actions with snappy cursor motion.
 Each command needs description (app perspective), startMs, endMs.
+startMs/endMs are relative to THIS call only — always start near 0; do not continue a prior batch timeline.
+For demos: speed "fast", fill false (live pressSequentially at delay 8). Never fill=true when recording.
 Optional recordStepsPath writes an MD log of commands + results.
 
 Example:
@@ -121,15 +133,15 @@ Example:
       "action": "click",
       "description": "Open Settings from the sidebar",
       "startMs": 0,
-      "endMs": 600,
+      "endMs": 400,
       "selector": "nav >> text=Settings",
-      "speed": "timed"
+      "speed": "fast"
     },
     {
       "action": "type",
       "description": "Enter search query",
-      "startMs": 700,
-      "endMs": 1400,
+      "startMs": 500,
+      "endMs": 900,
       "selector": "input[type=search]",
       "text": "billing",
       "fill": false

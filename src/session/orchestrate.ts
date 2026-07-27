@@ -9,12 +9,14 @@ import type {
 import type { ActiveSession } from "../session/manager.js";
 import { sleep } from "../util/sleep.js";
 
-function stepsFor(action: OrchestrateAction): number {
-  const speed = action.speed ?? "timed";
+/** Cursor move step count. Exported for unit tests. */
+export function stepsFor(action: OrchestrateAction): number {
+  const speed = action.speed ?? "fast";
   if (speed === "fast") return 8;
   if (speed === "slow") return 40;
   const dur = Math.max(0, action.endMs - action.startMs);
-  return Math.max(5, Math.min(60, Math.round(dur / 16)));
+  // Cap ~30 to match demo-video.md mouse.move({ steps: 30 })
+  return Math.max(8, Math.min(30, Math.round(dur / 16)));
 }
 
 async function resolvePoint(
@@ -196,13 +198,16 @@ export async function orchestrateSession(
   const page = session.page;
   const results: CommandResult[] = [];
   const t0 = Date.now();
+  // Normalize so a batch that continues a prior timeline (e.g. startMs: 12300)
+  // plays from 0 without dead air; preserve relative gaps. Log original times.
+  const paceOffset = input.commands[0]?.startMs ?? 0;
 
   for (let i = 0; i < input.commands.length; i++) {
     const cmd = input.commands[i]!;
-    // Pace to startMs relative to orchestration start
+    const pacedStart = Math.max(0, cmd.startMs - paceOffset);
     const elapsed = Date.now() - t0;
-    if (cmd.startMs > elapsed) {
-      await sleep(cmd.startMs - elapsed);
+    if (pacedStart > elapsed) {
+      await sleep(pacedStart - elapsed);
     }
     const start = Date.now();
     try {

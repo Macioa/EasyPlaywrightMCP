@@ -10,11 +10,12 @@ import {
 } from "../src/types/schemas.js";
 import { canAutoLogin, chooseStrategy, login } from "../src/auth/login.js";
 import { sessionManager } from "../src/session/manager.js";
-import { orchestrateSession } from "../src/session/orchestrate.js";
+import { orchestrateSession, stepsFor } from "../src/session/orchestrate.js";
 import { formatStepsMarkdown } from "../src/session/orchestrate.js";
 import { convertVf, convertArgs } from "../src/compile/convert.js";
 import { captionsFilter } from "../src/compile/captions.js";
 import { slateHtml } from "../src/compile/slate.js";
+import { SERVER_INSTRUCTIONS } from "../src/server.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,6 +61,17 @@ describe("Zod schemas", () => {
     });
     expect(a.startMs).toBe(0);
     expect(a.endMs).toBe(500);
+  });
+
+  it("defaults speed to fast when omitted", () => {
+    const a = OrchestrateActionSchema.parse({
+      action: "click",
+      description: "Open",
+      startMs: 0,
+      endMs: 400,
+      selector: "#x",
+    });
+    expect(a.speed).toBe("fast");
   });
 
   it("parses compile demo content union", () => {
@@ -377,6 +389,100 @@ describe("session lifecycle + orchestrate", () => {
       await fx.close();
     }
   });
+
+  it("normalizes timeline so large first startMs does not sleep ~12s", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><button id="go">Go</button></body></html>`);
+    });
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+      });
+      const session = sessionManager.get(started.sessionId);
+      const t0 = Date.now();
+      const results = await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "click",
+            description: "Click Go late timeline",
+            startMs: 12300,
+            endMs: 13000,
+            selector: "#go",
+            speed: "fast",
+          },
+          {
+            action: "wait",
+            description: "Short dwell",
+            startMs: 13100,
+            endMs: 13400,
+          },
+        ],
+      });
+      const wall = Date.now() - t0;
+      expect(results.every((r) => r.ok)).toBe(true);
+      expect(results[0]?.startMs).toBe(12300); // original times preserved in log
+      expect(wall).toBeLessThan(5000); // must not wait ~12.3s
+      await sessionManager.end(started.sessionId);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
+describe("cursor steps + demo instructions", () => {
+  it("defaults omitted speed to fast step count", () => {
+    expect(
+      stepsFor({
+        action: "move",
+        description: "m",
+        startMs: 0,
+        endMs: 1000,
+        x: 1,
+        y: 1,
+      })
+    ).toBe(8);
+  });
+
+  it("caps timed steps at 30 for long windows", () => {
+    expect(
+      stepsFor({
+        action: "move",
+        description: "m",
+        startMs: 0,
+        endMs: 2000,
+        speed: "timed",
+        x: 1,
+        y: 1,
+      })
+    ).toBe(30);
+    expect(
+      stepsFor({
+        action: "click",
+        description: "c",
+        startMs: 0,
+        endMs: 480,
+        speed: "timed",
+      })
+    ).toBe(30); // 480/16 = 30
+    expect(
+      stepsFor({
+        action: "click",
+        description: "c",
+        startMs: 0,
+        endMs: 160,
+        speed: "timed",
+      })
+    ).toBe(10); // 160/16 = 10, above min 8
+  });
+
+  it("SERVER_INSTRUCTIONS include demo interaction style", () => {
+    expect(SERVER_INSTRUCTIONS).toContain("Demo interaction style");
+    expect(SERVER_INSTRUCTIONS).toContain("fill=false");
+    expect(SERVER_INSTRUCTIONS).toContain('speed "fast"');
+  });
 });
 
 describe("compile helpers", () => {
@@ -394,6 +500,7 @@ describe("compile helpers", () => {
     ]);
     expect(f).toContain("drawtext");
     expect(f).toContain("Hello");
+    expect(f).toContain("fontfile=");
     const html = slateHtml({
       eyebrow: "INTRO",
       heading: "Demo",

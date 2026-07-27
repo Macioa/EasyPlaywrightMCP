@@ -163,21 +163,23 @@ export type SessionIdentity = z.infer<typeof SessionIdentitySchema>;
 
 export const CursorSpeedSchema = z
   .enum(["fast", "slow", "timed"])
-  .default("timed")
-  .describe("Cursor motion: fast (~8 steps), slow (~40), timed (steps from startMs/endMs)");
+  .default("fast")
+  .describe(
+    "Cursor motion: fast (~8 steps, default), slow (~40), timed (steps from startMs/endMs, capped ~30). Prefer fast for demos."
+  );
 
 /**
  * Example move:
  * ```json
- * { "action": "move", "description": "Move cursor to Save", "startMs": 0, "endMs": 400, "x": 100, "y": 200, "speed": "timed" }
+ * { "action": "move", "description": "Move cursor to Save", "startMs": 0, "endMs": 400, "x": 100, "y": 200, "speed": "fast" }
  * ```
  * Example click:
  * ```json
- * { "action": "click", "description": "Click Save", "startMs": 400, "endMs": 700, "selector": "button:has-text('Save')" }
+ * { "action": "click", "description": "Click Save", "startMs": 400, "endMs": 700, "selector": "button:has-text('Save')", "speed": "fast" }
  * ```
- * Example type:
+ * Example type (demos: fill false for live keystrokes):
  * ```json
- * { "action": "type", "description": "Enter email", "startMs": 700, "endMs": 1200, "selector": "#email", "text": "a@b.com" }
+ * { "action": "type", "description": "Enter email", "startMs": 700, "endMs": 1200, "selector": "#email", "text": "a@b.com", "fill": false }
  * ```
  */
 export const OrchestrateActionSchema = z.object({
@@ -196,9 +198,13 @@ export const OrchestrateActionSchema = z.object({
   description: z
     .string()
     .describe("App-perspective description, e.g. Open Settings from the sidebar"),
-  startMs: z.coerce.number().describe("Action start offset ms within the orchestration"),
-  endMs: z.coerce.number().describe("Action end offset ms within the orchestration"),
-  speed: CursorSpeedSchema.optional(),
+  startMs: z.coerce
+    .number()
+    .describe("Action start offset ms within THIS orchestrate_session call (start near 0)"),
+  endMs: z.coerce
+    .number()
+    .describe("Action end offset ms within THIS orchestrate_session call"),
+  speed: CursorSpeedSchema,
   x: z.coerce.number().optional().describe("Viewport X for move/click/tap/hover"),
   y: z.coerce.number().optional().describe("Viewport Y for move/click/tap/hover"),
   selector: z.string().optional().describe("CSS/text selector"),
@@ -210,7 +216,9 @@ export const OrchestrateActionSchema = z.object({
   fill: z
     .boolean()
     .optional()
-    .describe("If true, use locator.fill instead of pressSequentially for type"),
+    .describe(
+      "If true, locator.fill (instant). For demos leave false/omit so pressSequentially(delay 8) shows live typing. Testing-only: true is fine."
+    ),
 });
 export type OrchestrateAction = z.infer<typeof OrchestrateActionSchema>;
 

@@ -1,9 +1,14 @@
 import { spawnSync } from "node:child_process";
 
 export function runFfmpeg(args: string[]): void {
-  const r = spawnSync("ffmpeg", ["-y", ...args], { encoding: "utf8" });
+  const r = spawnSync("ffmpeg", ["-y", ...args], {
+    encoding: "utf8",
+    // Ensure child can resolve fonts when callers pass fontfile under the package.
+    env: process.env,
+  });
   if (r.status !== 0) {
-    throw new Error(r.stderr?.slice(-1500) || "ffmpeg failed");
+    const err = (r.stderr || r.stdout || "ffmpeg failed").trim();
+    throw new Error(err.slice(-2000));
   }
 }
 

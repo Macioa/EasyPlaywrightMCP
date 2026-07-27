@@ -23,6 +23,8 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 4. `end_session` on every session
 5. Review MD logs → `compile_demo`
 
+**Demo interaction style:** short/direct; `speed: "fast"`; `fill: false` (live typing at delay 8); each `orchestrate_session` clock starts at 0 (do not continue prior timelines); short dwells; minimal scroll; batch related actions in one call.
+
 ## Tools & type examples
 
 ### `login`
@@ -82,7 +84,7 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
       startMs: 0,
       endMs: 600,
       selector: "nav >> text=Settings",
-      speed: "timed" // fast | slow | timed
+      speed: "fast" // fast (default) | slow | timed
     }
   ]
 }
