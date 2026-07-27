@@ -292,6 +292,10 @@ export const NarrationCueSchema = z.object({
   startMs: z.coerce.number(),
   endMs: z.coerce.number(),
   text: z.string(),
+  audioPath: z
+    .string()
+    .optional()
+    .describe("Optional pre-synthesized mp3/wav from demoMode orchestrate"),
 });
 export type NarrationCue = z.infer<typeof NarrationCueSchema>;
 
@@ -300,19 +304,7 @@ export type NarrationCue = z.infer<typeof NarrationCueSchema>;
  * ```json
  * {
  *   "kind": "clip",
- *   "videoPath": "C:/Videos/clip1.webm",
- *   "narration": [{ "startMs": 0, "endMs": 4000, "text": "We start on the dashboard." }]
- * }
- * ```
- * Example slate:
- * ```json
- * {
- *   "kind": "slate",
- *   "eyebrow": "INTRO",
- *   "heading": "Product Demo",
- *   "body": "A quick walkthrough",
- *   "durationMs": 3000,
- *   "narration": [{ "startMs": 0, "endMs": 2800, "text": "Welcome to the demo." }]
+ *   "videoPath": "C:/Videos/clip1.webm"
  * }
  * ```
  */
@@ -320,6 +312,16 @@ export const DemoClipSchema = z.object({
   kind: z.literal("clip"),
   videoPath: z.string(),
   narration: z.array(NarrationCueSchema).default([]),
+  cuesPath: z
+    .string()
+    .optional()
+    .describe("Optional path to .cues.json (default: beside videoPath)"),
+  preferCuesFile: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true (default), load cues.json and ignore hand-authored narration"
+    ),
 });
 export type DemoClip = z.infer<typeof DemoClipSchema>;
 

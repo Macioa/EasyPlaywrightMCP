@@ -9,6 +9,8 @@ import {
 } from "playwright";
 import { captureContextOptions, injectCaptureHelpers } from "../browser/context.js";
 import { ensureDataDirs, storageStatePath, VIEWPORT } from "../paths.js";
+import { readCuesFile } from "./cues.js";
+import { trimVideoToActionSpan } from "../compile/trim.js";
 import type { StartSessionInput, StartSessionResult } from "../types/schemas.js";
 
 export interface ActiveSession {
@@ -182,6 +184,14 @@ export class SessionManager {
             fs.mkdirSync(path.dirname(s.recordVideoPath), { recursive: true });
             fs.renameSync(raw, s.recordVideoPath);
             videoPath = s.recordVideoPath;
+            const cues = readCuesFile(s.recordVideoPath);
+            if (cues && cues.cues.length > 0) {
+              try {
+                trimVideoToActionSpan(s.recordVideoPath, cues);
+              } catch {
+                /* keep untrimmed video if ffmpeg trim fails */
+              }
+            }
           } else {
             videoPath = raw;
           }

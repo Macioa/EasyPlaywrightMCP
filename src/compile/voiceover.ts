@@ -105,7 +105,11 @@ export function buildNarrationBed(
     const c = cues[i]!;
     const mp3 = path.join(voDir, `cue-${i}.mp3`);
     const wav = path.join(voDir, `cue-${i}.wav`);
-    synthesizeLine(c.text, mp3, voice, rate);
+    if (c.audioPath && fs.existsSync(c.audioPath)) {
+      fs.copyFileSync(c.audioPath, mp3);
+    } else {
+      synthesizeLine(c.text, mp3, voice, rate);
+    }
     const windowSec = Math.max(0.2, (c.endMs - c.startMs) / 1000);
     runFfmpeg(fitVoiceoverArgs(mp3, wav, windowSec));
     inputs.push("-i", wav);

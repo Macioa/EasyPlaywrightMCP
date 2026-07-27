@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { scratchJobDir } from "../paths.js";
-import type { CompileDemoInput, CompileDemoResult } from "../types/schemas.js";
+import { readCuesFile } from "../session/cues.js";
+import type {
+  CompileDemoInput,
+  CompileDemoResult,
+  DemoClip,
+  NarrationCue,
+} from "../types/schemas.js";
 import { burnCaptions } from "./captions.js";
 import { convertVideo, hasBinary, runFfprobeDuration } from "./convert.js";
 import { recordSlate } from "./slate.js";
@@ -12,6 +18,25 @@ import {
   hasEdgeTts,
   muxAudio,
 } from "./voiceover.js";
+
+/** Resolve narration for a clip: cues.json wins when preferCuesFile (default). */
+export function resolveClipNarration(item: DemoClip): NarrationCue[] {
+  const prefer = item.preferCuesFile !== false;
+  if (prefer) {
+    const cues = item.cuesPath
+      ? readCuesFile(item.cuesPath)
+      : readCuesFile(item.videoPath);
+    if (cues?.cues?.length) {
+      return cues.cues.map((c) => ({
+        startMs: c.startMs,
+        endMs: c.endMs,
+        text: c.text,
+        audioPath: c.audioPath,
+      }));
+    }
+  }
+  return item.narration ?? [];
+}
 
 export async function compileDemo(
   input: CompileDemoInput
@@ -55,7 +80,6 @@ export async function compileDemo(
           return { ok: false, reason: `Missing video: ${src}` };
         }
         if (/\.mp4$/i.test(src) && fast) {
-          // Still normalize for concat safety
           convertVideo(src, baseMp4, true);
         } else {
           convertVideo(src, baseMp4, fast);
@@ -64,8 +88,18 @@ export async function compileDemo(
 
       const narration =
         item.kind === "clip"
-          ? item.narration
+          ? resolveClipNarration(item)
           : item.narration ?? [];
+
+      let clipVoice = voice;
+      let clipRate = rate;
+      if (item.kind === "clip") {
+        const cuesMeta = item.cuesPath
+          ? readCuesFile(item.cuesPath)
+          : readCuesFile(item.videoPath);
+        if (cuesMeta?.voice) clipVoice = cuesMeta.voice;
+        if (cuesMeta?.rate) clipRate = cuesMeta.rate;
+      }
 
       const captioned = path.join(segDir, "captioned.mp4");
       if (narration.length) {
@@ -76,7 +110,13 @@ export async function compileDemo(
 
       const dur = runFfprobeDuration(captioned);
       const voDir = path.join(segDir, "vo");
-      const bed = buildNarrationBed(narration, dur, voDir, voice, rate);
+      const bed = buildNarrationBed(
+        narration,
+        dur,
+        voDir,
+        clipVoice,
+        clipRate
+      );
       const narrated = path.join(segDir, "narrated.mp4");
       muxAudio(captioned, bed, narrated);
       segmentMp4s.push(narrated);

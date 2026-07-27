@@ -15,10 +15,12 @@ import { formatStepsMarkdown } from "../src/session/orchestrate.js";
 import { convertVf, convertArgs } from "../src/compile/convert.js";
 import { captionsFilter } from "../src/compile/captions.js";
 import { slateHtml } from "../src/compile/slate.js";
+import { computeTrimWindow, shiftCuesFile } from "../src/compile/trim.js";
+import { resolveClipNarration } from "../src/compile/pipeline.js";
+import { writeCuesFile, cuesPathFor, readCuesFile, type DemoCuesFile } from "../src/session/cues.js";
 import { SERVER_INSTRUCTIONS } from "../src/server.js";
 import { sleep } from "../src/util/sleep.js";
 import { setSynthesizeNarrationForTests } from "../src/compile/tts.js";
-import { cuesPathFor, readCuesFile } from "../src/session/cues.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -675,5 +677,69 @@ describe("compile helpers", () => {
     });
     expect(html).toContain("Demo");
     expect(html).toContain("INTRO");
+  });
+
+  it("computes trim window and shifts cues", () => {
+    const win = computeTrimWindow({ startMs: 5000, endMs: 12000 }, 30000);
+    expect(win.startMs).toBe(4750);
+    expect(win.endMs).toBe(12400);
+    const shifted = shiftCuesFile(
+      {
+        sessionId: "s",
+        videoPath: "x.webm",
+        voice: "v",
+        rate: "+10%",
+        cues: [{ startMs: 5000, endMs: 8000, text: "a", actionIndex: 0 }],
+        actionSpan: { startMs: 5000, endMs: 12000 },
+      },
+      4750
+    );
+    expect(shifted.cues[0]?.startMs).toBe(250);
+    expect(shifted.actionSpan.startMs).toBe(250);
+  });
+
+  it("resolveClipNarration prefers cues file over hand-authored narration", () => {
+    const videoPath = path.join(os.tmpdir(), `epm-cues-pref-${Date.now()}.webm`);
+    const file: DemoCuesFile = {
+      sessionId: "s1",
+      videoPath,
+      voice: "en-US-AndrewNeural",
+      rate: "+10%",
+      cues: [
+        {
+          startMs: 100,
+          endMs: 900,
+          text: "From cues file",
+          actionIndex: 0,
+          audioPath: "/tmp/a.mp3",
+        },
+      ],
+      actionSpan: { startMs: 100, endMs: 900 },
+    };
+    writeCuesFile(file);
+    try {
+      const narration = resolveClipNarration({
+        kind: "clip",
+        videoPath,
+        narration: [{ startMs: 0, endMs: 5000, text: "Wrong LLM guess" }],
+      });
+      expect(narration).toHaveLength(1);
+      expect(narration[0]?.text).toBe("From cues file");
+      expect(narration[0]?.audioPath).toBe("/tmp/a.mp3");
+
+      const manual = resolveClipNarration({
+        kind: "clip",
+        videoPath,
+        preferCuesFile: false,
+        narration: [{ startMs: 0, endMs: 5000, text: "Manual only" }],
+      });
+      expect(manual[0]?.text).toBe("Manual only");
+    } finally {
+      try {
+        fs.unlinkSync(cuesPathFor(videoPath));
+      } catch {
+        /* ignore */
+      }
+    }
   });
 });
