@@ -40,6 +40,9 @@ async function resolvePoint(
   return null;
 }
 
+/** Dwell so the click ring is captured in screencast frames. */
+const CLICK_HIGHLIGHT_HOLD_MS = 380;
+
 async function moveCursor(
   page: Page,
   action: OrchestrateAction,
@@ -48,7 +51,23 @@ async function moveCursor(
   await page.mouse.move(point.x, point.y, { steps: stepsFor(action) });
 }
 
-async function runOne(page: Page, action: OrchestrateAction): Promise<void> {
+async function flashClickHighlight(
+  page: Page,
+  point: { x: number; y: number }
+): Promise<void> {
+  await page.evaluate(({ x, y }) => {
+    const w = window as Window & {
+      __epmClickHighlight?: (x: number, y: number) => void;
+    };
+    w.__epmClickHighlight?.(x, y);
+  }, point);
+}
+
+async function runOne(
+  page: Page,
+  action: OrchestrateAction,
+  options: { holdClickHighlight?: boolean } = {}
+): Promise<void> {
   switch (action.action) {
     case "move": {
       const pt = await resolvePoint(page, action);
@@ -61,9 +80,19 @@ async function runOne(page: Page, action: OrchestrateAction): Promise<void> {
       const pt = await resolvePoint(page, action);
       if (pt) {
         await moveCursor(page, action, pt);
+        await flashClickHighlight(page, pt);
         await page.mouse.click(pt.x, pt.y);
+        if (options.holdClickHighlight) await sleep(CLICK_HIGHLIGHT_HOLD_MS);
       } else if (action.selector) {
+        const box = await page.locator(action.selector).first().boundingBox();
+        if (box) {
+          await flashClickHighlight(page, {
+            x: box.x + box.width / 2,
+            y: box.y + box.height / 2,
+          });
+        }
         await page.locator(action.selector).first().click();
+        if (options.holdClickHighlight) await sleep(CLICK_HIGHLIGHT_HOLD_MS);
       } else {
         throw new Error("click/tap requires selector or x/y");
       }
@@ -259,7 +288,9 @@ export async function orchestrateSession(
         const planned = Math.max(0, cmd.endMs - cmd.startMs);
         await sleep(planned || 200);
       } else {
-        await runOne(page, cmd);
+        await runOne(page, cmd, {
+          holdClickHighlight: Boolean(session.recordVideoPath),
+        });
       }
     } catch (err) {
       ok = false;

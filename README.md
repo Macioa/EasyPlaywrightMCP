@@ -2,7 +2,7 @@
 
 LLM-driven Playwright MCP for **automated testing** and **demo videos**.
 
-Capture: synthetic cursor, **1920×1080 @ deviceScaleFactor 2**, WebM→H.264 **60fps `minterpolate`**, smooth rAF scroll.  
+Capture: synthetic cursor + always-on click highlight, **1920×1080 @ deviceScaleFactor 2**, WebM→H.264 **60fps `minterpolate`**, smooth rAF scroll.  
 Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 
 ## Workflows

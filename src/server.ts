@@ -39,7 +39,7 @@ export const SERVER_INSTRUCTIONS = `EasyPlaywrightMCP — LLM-driven Playwright 
 - Testing (no recordVideoPath): snappy startMs/endMs pacing; fill=true OK.
 - Demo (recording): speech and UI are conjoined by the server; do not invent compile narration clocks.
 
-Capture recipe: synthetic cursor, 1920×1080 deviceScaleFactor 2, WebM→H.264 60fps minterpolate, smooth rAF scroll.
+Capture recipe: synthetic cursor + always-on click highlight, 1920×1080 deviceScaleFactor 2, WebM→H.264 60fps minterpolate, smooth rAF scroll.
 Narration: Microsoft Edge neural TTS via edge-tts (default en-US-AndrewNeural +10%).
 
 Type examples are in each tool description. Prefer selectors from query_session.interactive / ariaSnapshot.`;
@@ -80,7 +80,7 @@ Example success: { "ok": true, "profileId": "prof_abc", "strategy": "password" }
   server.tool(
     "start_session",
     `Start a Playwright Chromium session (headless or windowed) and keep it open.
-Optional recordVideoPath enables WebM capture at 1920×1080 @ deviceScaleFactor 2 with synthetic cursor.
+Optional recordVideoPath enables WebM capture at 1920×1080 @ deviceScaleFactor 2 with synthetic cursor and always-on click highlight.
 When recording, demoMode is on (narrate defaults true): orchestrate auto-paces to TTS.
 Pass profileId from login to reuse auth.
 

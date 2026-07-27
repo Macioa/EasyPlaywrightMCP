@@ -614,6 +614,57 @@ describe("cursor steps + demo instructions", () => {
     ).toBe(8);
   });
 
+  it("shows always-on click highlight ring on click", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(
+        `<!doctype html><html><body style="margin:40px">
+          <button id="go" style="width:120px;height:48px">Go</button>
+        </body></html>`
+      );
+    });
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+      });
+      const session = sessionManager.get(started.sessionId);
+      const page = session.page;
+
+      const installed = await page.evaluate(() =>
+        Boolean(
+          (window as Window & { __epmClickHighlight?: unknown }).__epmClickHighlight
+        )
+      );
+      expect(installed).toBe(true);
+
+      await page.evaluate(() => {
+        (window as Window & { __epmClickHighlight?: (x: number, y: number) => void })
+          .__epmClickHighlight?.(100, 80);
+      });
+      const ringCount = await page.locator("[data-epm-click]").count();
+      expect(ringCount).toBeGreaterThan(0);
+
+      const results = await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "click",
+            description: "Click Go",
+            startMs: 0,
+            endMs: 200,
+            selector: "#go",
+            speed: "fast",
+          },
+        ],
+      });
+      expect(results[0]?.ok).toBe(true);
+      await sessionManager.end(started.sessionId);
+    } finally {
+      await fx.close();
+    }
+  });
+
   it("caps timed steps at 30 for long windows", () => {
     expect(
       stepsFor({
