@@ -17,6 +17,8 @@ import { captionsFilter } from "../src/compile/captions.js";
 import { slateHtml } from "../src/compile/slate.js";
 import { SERVER_INSTRUCTIONS } from "../src/server.js";
 import { sleep } from "../src/util/sleep.js";
+import { setSynthesizeNarrationForTests } from "../src/compile/tts.js";
+import { cuesPathFor, readCuesFile } from "../src/session/cues.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -39,6 +41,7 @@ function startFixtureServer(handler: (url: string, req: import("node:http").Inco
 
 afterEach(async () => {
   await sessionManager.endAll();
+  setSynthesizeNarrationForTests(null);
 });
 
 describe("Zod schemas", () => {
@@ -444,12 +447,13 @@ describe("session lifecycle + orchestrate", () => {
         startUrl: fx.baseUrl,
         headed: false,
         recordVideoPath: videoPath,
+        narrate: false,
       });
-      expect(started.demoMode).toBe(true);
+      expect(started.demoMode).toBe(false);
       expect(started.recording).toBe(true);
       const session = sessionManager.get(started.sessionId);
       expect(session.recordingStartedAt).toBeTypeOf("number");
-      expect(session.demoMode).toBe(true);
+      expect(session.demoMode).toBe(false);
 
       await sleep(80);
       const results = await orchestrateSession(session, {
@@ -494,6 +498,102 @@ describe("session lifecycle + orchestrate", () => {
           /* ignore */
         }
       }
+    }
+  });
+
+  it("demoMode paces action span to mocked TTS duration", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><button id="go">Go</button></body></html>`);
+    });
+    const videoPath = path.join(os.tmpdir(), `epm-demo-${Date.now()}.webm`);
+    const fakeMp3 = path.join(os.tmpdir(), `epm-fake-${Date.now()}.mp3`);
+    fs.writeFileSync(fakeMp3, Buffer.from([0]));
+    setSynthesizeNarrationForTests(async ({ index }) => ({
+      audioPath: fakeMp3,
+      durationMs: 800,
+    }));
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+        recordVideoPath: videoPath,
+      });
+      expect(started.demoMode).toBe(true);
+      const session = sessionManager.get(started.sessionId);
+      const t0 = Date.now();
+      const results = await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "click",
+            description: "Click the Go button now",
+            startMs: 0,
+            endMs: 100,
+            selector: "#go",
+            speed: "fast",
+          },
+        ],
+      });
+      const wall = Date.now() - t0;
+      expect(results[0]?.ok).toBe(true);
+      expect(results[0]?.audioPath).toBe(fakeMp3);
+      expect(results[0]!.durationMs!).toBeGreaterThanOrEqual(800);
+      expect(wall).toBeGreaterThanOrEqual(800);
+      // Snappy startMs/endMs must not win over VO hold
+      expect(wall).toBeGreaterThan(400);
+      const cues = readCuesFile(videoPath);
+      expect(cues?.cues[0]?.audioPath).toBe(fakeMp3);
+      expect(cues?.cues[0]?.endMs! - cues!.cues[0]!.startMs).toBe(800);
+      await sessionManager.end(started.sessionId);
+    } finally {
+      await fx.close();
+      for (const p of [videoPath, cuesPathFor(videoPath), fakeMp3]) {
+        try {
+          fs.unlinkSync(p);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
+
+  it("non-recording sessions still honor startMs sleeps", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><button id="go">Go</button></body></html>`);
+    });
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+      });
+      expect(started.demoMode).toBeFalsy();
+      const session = sessionManager.get(started.sessionId);
+      const t0 = Date.now();
+      await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "wait",
+            description: "dwell",
+            startMs: 0,
+            endMs: 50,
+          },
+          {
+            action: "click",
+            description: "Click",
+            startMs: 400,
+            endMs: 500,
+            selector: "#go",
+            speed: "fast",
+          },
+        ],
+      });
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(350);
+      await sessionManager.end(started.sessionId);
+    } finally {
+      await fx.close();
     }
   });
 });

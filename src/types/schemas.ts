@@ -229,6 +229,16 @@ export const OrchestrateActionSchema = z.object({
     .describe(
       "If true, locator.fill (instant). For demos leave false/omit so pressSequentially(delay 8) shows live typing. Testing-only: true is fine."
     ),
+  narration: z
+    .string()
+    .optional()
+    .describe(
+      "Spoken line for demoMode (default: description). Ignored when skipNarration is true."
+    ),
+  skipNarration: z
+    .boolean()
+    .optional()
+    .describe("If true, do not synthesize VO for this beat in demoMode"),
 });
 export type OrchestrateAction = z.infer<typeof OrchestrateActionSchema>;
 

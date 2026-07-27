@@ -8,6 +8,11 @@ import type {
 } from "../types/schemas.js";
 import type { ActiveSession } from "../session/manager.js";
 import { buildCuesFile, writeCuesFile } from "../session/cues.js";
+import {
+  sessionVoDir,
+  synthesizeNarration,
+  VO_HOLD_PAD_MS,
+} from "../compile/tts.js";
 import { sleep } from "../util/sleep.js";
 
 /** Cursor move step count. Exported for unit tests. */
@@ -208,57 +213,87 @@ export async function orchestrateSession(
   const page = session.page;
   const results: CommandResult[] = [];
   const t0 = Date.now();
-  // Normalize so a batch that continues a prior timeline (e.g. startMs: 12300)
-  // plays from 0 without dead air; preserve relative gaps. Log original times.
-  // (demoMode TTS pacing in a later change will skip these sleeps.)
-  const paceOffset = input.commands[0]?.startMs ?? 0;
+  const demoMode = session.demoMode;
+  // Testing mode: normalize timeline so a batch that continues a prior clock
+  // (e.g. startMs: 12300) plays from 0. demoMode ignores startMs/endMs pacing.
+  const paceOffset = demoMode ? 0 : (input.commands[0]?.startMs ?? 0);
+  const voDir = demoMode ? sessionVoDir(session.sessionId) : undefined;
 
   for (let i = 0; i < input.commands.length; i++) {
     const cmd = input.commands[i]!;
-    const pacedStart = Math.max(0, cmd.startMs - paceOffset);
-    const elapsed = Date.now() - t0;
-    if (pacedStart > elapsed) {
-      await sleep(pacedStart - elapsed);
+
+    if (!demoMode) {
+      const pacedStart = Math.max(0, cmd.startMs - paceOffset);
+      const elapsed = Date.now() - t0;
+      if (pacedStart > elapsed) {
+        await sleep(pacedStart - elapsed);
+      }
     }
+
+    const narrationText =
+      cmd.skipNarration || cmd.action === "wait"
+        ? undefined
+        : (cmd.narration ?? cmd.description);
+
+    let audioPath: string | undefined;
+    let voMs = 0;
+    if (demoMode && narrationText && voDir) {
+      const syn = await synthesizeNarration({
+        text: narrationText,
+        voice: session.voice,
+        rate: session.rate,
+        outDir: voDir,
+        index: i,
+      });
+      audioPath = syn.audioPath;
+      voMs = syn.durationMs;
+    }
+
     const videoStartMs = videoOffsetMs(session);
-    const start = Date.now();
-    const narrationText = cmd.description;
+    const beatStart = Date.now();
+    let ok = true;
+    let reason: string | undefined;
     try {
-      await runOne(page, cmd);
-      const durationMs = Date.now() - start;
-      const videoEndMs = videoOffsetMs(session);
-      results.push({
-        index: i,
-        description: cmd.description,
-        action: cmd.action,
-        startMs: cmd.startMs,
-        endMs: cmd.endMs,
-        ok: true,
-        durationMs,
-        videoStartMs,
-        videoEndMs,
-        narrationText,
-        narrationStartMs: videoStartMs,
-        narrationEndMs: videoEndMs,
-      });
+      // wait actions in demoMode: hold for planned window only (no VO)
+      if (demoMode && cmd.action === "wait") {
+        const planned = Math.max(0, cmd.endMs - cmd.startMs);
+        await sleep(planned || 200);
+      } else {
+        await runOne(page, cmd);
+      }
     } catch (err) {
-      const videoEndMs = videoOffsetMs(session);
-      results.push({
-        index: i,
-        description: cmd.description,
-        action: cmd.action,
-        startMs: cmd.startMs,
-        endMs: cmd.endMs,
-        ok: false,
-        reason: err instanceof Error ? err.message : String(err),
-        durationMs: Date.now() - start,
-        videoStartMs,
-        videoEndMs,
-        narrationText,
-        narrationStartMs: videoStartMs,
-        narrationEndMs: videoEndMs,
-      });
+      ok = false;
+      reason = err instanceof Error ? err.message : String(err);
     }
+
+    if (demoMode && voMs > 0) {
+      const elapsedBeat = Date.now() - beatStart;
+      const hold = voMs + VO_HOLD_PAD_MS - elapsedBeat;
+      if (hold > 0) await sleep(hold);
+    }
+
+    const durationMs = Date.now() - beatStart;
+    const videoEndMs = videoOffsetMs(session);
+    const narrationStartMs = videoStartMs;
+    const narrationEndMs =
+      videoStartMs !== undefined ? videoStartMs + voMs : undefined;
+
+    results.push({
+      index: i,
+      description: cmd.description,
+      action: cmd.action,
+      startMs: cmd.startMs,
+      endMs: cmd.endMs,
+      ok,
+      reason,
+      durationMs,
+      videoStartMs,
+      videoEndMs,
+      narrationText,
+      narrationStartMs,
+      narrationEndMs,
+      audioPath,
+    });
   }
 
   if (session.recordVideoPath && session.recordingStartedAt !== undefined) {
