@@ -396,7 +396,7 @@ export const SetSessionAuthInputSchema = z.object({
   credentialsJson: z
     .string()
     .describe(
-      "JSON paste from the browser snippet (cookies/localStorage/sessionStorage) or Playwright storageState"
+      "JSON paste from the restricted-auth console snippet (Network Cookie header + storage) or Playwright storageState. Only call set_session_auth after the user was given the login URL + snippet and has pasted this JSON."
     ),
   sessionId: z
     .string()

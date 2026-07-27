@@ -16,19 +16,25 @@ import { handleOrchestrateSession } from "./tools/orchestrate.js";
 import { handleEndSession } from "./tools/endSession.js";
 import { handleCompileDemo } from "./tools/compileDemo.js";
 import { ensureDataDirs } from "./paths.js";
+import {
+  RESTRICTED_AUTH_SNIPPET,
+  RESTRICTED_AUTH_USER_MESSAGE_TEMPLATE,
+  WHEN_TO_USE_SET_SESSION_AUTH,
+} from "./auth/restrictedAuthProtocol.js";
 
 export const SERVER_INSTRUCTIONS = `EasyPlaywrightMCP — LLM-driven Playwright testing and demo videos.
 
 ## Workflow A — Automated testing
-1. login — save auth profile (password, tokens, OAuth, or manual window)
-   - Restricted auth (Google/OAuth bot-blocked): skip headed login; use set_session_auth instead (see Restricted auth below)
+1. Auth: evaluate login type first (see "When to use set_session_auth").
+   - Restricted (Google OAuth, Microsoft, Discord, Cloudflare bot wall, etc.): immediately message the user with link + Network Cookie steps + JS snippet; wait for paste; then set_session_auth → profileId
+   - Otherwise: login → profileId
 2. start_session — open a session (usually headed=false); pass profileId; do NOT set recordVideoPath
 3. Loop: query_session → orchestrate_session until the task is done
 4. end_session
 5. Report a concise short answer to the user (pass/fail + key findings)
 
 ## Workflow B — Demo videos (server-paced narration)
-1. login — save auth profile if the flow needs auth (or set_session_auth for restricted providers)
+1. Auth same as Workflow A (set_session_auth for restricted providers; login otherwise)
 2. start_session with recordVideoPath (demoMode on by default; narrate:false for silent capture)
 3. Loop: query_session → orchestrate_session
    - Put the spoken sentence in description (or narration). Server synthesizes TTS, acts, and holds until VO ends.
@@ -38,32 +44,21 @@ export const SERVER_INSTRUCTIONS = `EasyPlaywrightMCP — LLM-driven Playwright 
 5. compile_demo — pass videoPath only for clips (loads sibling .cues.json automatically). Optional slates for intros.
 6. Do NOT hand-author clip narration timestamps when cues.json exists — the server wins.
 
-## Restricted auth (Google / bot-blocked OAuth)
-When automation cannot complete login (Google, Discord, similar), do NOT rely on headed login:
-1. Give the user the app login/site URL and this console snippet (run on the **app** origin after they are logged in — not only the Google interstitial):
+${WHEN_TO_USE_SET_SESSION_AUTH}
+
+## Restricted auth — mandatory user message (send IMMEDIATELY)
+When set_session_auth is needed, your next user-visible reply MUST include the login URL, Network Cookie instructions, and JS snippet. Replace LOGIN_URL with the concrete URL. Do not call set_session_auth until they paste JSON. Do not open headed login for Google OAuth.
+
+Template (send verbatim structure; only substitute LOGIN_URL):
+
+${RESTRICTED_AUTH_USER_MESSAGE_TEMPLATE}
+
+Canonical snippet (must match the template):
 \`\`\`js
-(() => {
-  const ls = [], ss = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const name = localStorage.key(i);
-    ls.push({ name, value: localStorage.getItem(name) });
-  }
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const name = sessionStorage.key(i);
-    ss.push({ name, value: sessionStorage.getItem(name) });
-  }
-  const cookies = document.cookie.split(";").map((c) => {
-    const i = c.indexOf("=");
-    const name = c.slice(0, i).trim();
-    const value = c.slice(i + 1).trim();
-    return { name, value, domain: location.hostname, path: "/" };
-  }).filter((c) => c.name);
-  return JSON.stringify({ origin: location.origin, url: location.href, cookies, localStorage: ls, sessionStorage: ss }, null, 2);
-})()
+${RESTRICTED_AUTH_SNIPPET}
 \`\`\`
-2. httpOnly caveat: document.cookie cannot read httpOnly cookies (e.g. Clerk __session). Ask the user to also copy those from DevTools → Application → Cookies as { name, value, domain, path, httpOnly, secure, sameSite } and merge into cookies[].
-3. Call set_session_auth with the pasted JSON → profileId (optional sessionId to inject into a live session).
-4. start_session({ profileId }) as usual.
+
+After the user pastes JSON → call set_session_auth({ siteUrl, credentialsJson }) → start_session({ profileId }).
 
 ## Testing vs demo timing
 - Testing (no recordVideoPath): snappy startMs/endMs pacing; fill=true OK.
@@ -92,7 +87,8 @@ export function createServer(): McpServer {
     `Orchestrate login and persist Playwright storageState.
 Strategies: password form, HTTP Basic, bearer/token inject, OAuth cookies/tokens, manual/OAuth window, reuse profileId.
 Auto (headless) when enough creds/tokens are provided; otherwise opens a headed window and waits.
-For Google/bot-blocked OAuth, prefer set_session_auth (user's own browser + paste) instead of headed login.
+
+DO NOT use this tool for Google OAuth / Sign in with Google, Microsoft/Apple/Discord social login, Cloudflare bot walls, or other restricted IdPs — those require set_session_auth. If you are about to open a headed login for Google OAuth, stop and follow the Restricted auth user-message template instead.
 
 Example input:
 \`\`\`json
@@ -110,36 +106,19 @@ Example success: { "ok": true, "profileId": "prof_abc", "strategy": "password" }
 
   server.tool(
     "set_session_auth",
-    `Set Playwright auth from credentials the user extracted in their own browser (restricted Google/OAuth).
-Instruct the user to open the app URL, log in, then run this console snippet on the **app** origin and paste the JSON:
-\`\`\`js
-(() => {
-  const ls = [], ss = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const name = localStorage.key(i);
-    ls.push({ name, value: localStorage.getItem(name) });
-  }
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const name = sessionStorage.key(i);
-    ss.push({ name, value: sessionStorage.getItem(name) });
-  }
-  const cookies = document.cookie.split(";").map((c) => {
-    const i = c.indexOf("=");
-    const name = c.slice(0, i).trim();
-    const value = c.slice(i + 1).trim();
-    return { name, value, domain: location.hostname, path: "/" };
-  }).filter((c) => c.name);
-  return JSON.stringify({ origin: location.origin, url: location.href, cookies, localStorage: ls, sessionStorage: ss }, null, 2);
-})()
-\`\`\`
-httpOnly cookies (e.g. Clerk __session) are invisible to document.cookie — ask the user to merge DevTools Application → Cookies entries ({ name, value, domain, path, httpOnly, secure, sameSite }) into cookies[].
-Also accepts Playwright storageState JSON. Always saves profileId; pass sessionId to inject into a live session.
+    `Inject user-browser credentials into Playwright (restricted auth). ALWAYS saves profileId; optional sessionId applies to a live session.
 
-Example:
+BEFORE calling this tool: you MUST already have sent the user (same conversation) the login URL + Network Cookie steps + JS snippet from server instructions. Never call this tool "speculatively" without first giving those instructions. Never open headed login for Google OAuth — use this flow.
+
+Triggers: Google OAuth / Sign in with Google, Gmail/Google apps, Microsoft/Entra, Apple, Discord OAuth, Cloudflare Turnstile on login, Okta/Auth0 social IdP, or any login Playwright cannot complete.
+
+Accepts credentialsJson from the console snippet (Cookie header + storage) or Playwright storageState JSON.
+
+Example (after user pastes):
 \`\`\`json
 {
-  "siteUrl": "https://app.example.com/dashboard",
-  "credentialsJson": "{\\"origin\\":\\"https://app.example.com\\",\\"cookies\\":[{\\"name\\":\\"session\\",\\"value\\":\\"abc\\",\\"domain\\":\\"app.example.com\\",\\"path\\":\\"/\\"}],\\"localStorage\\":[],\\"sessionStorage\\":[]}"
+  "siteUrl": "https://mail.google.com/",
+  "credentialsJson": "{...paste from user...}"
 }
 \`\`\`
 Returns: { "ok": true, "profileId": "prof_…", "strategy": "restricted_auth" }`,

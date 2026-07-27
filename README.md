@@ -5,6 +5,15 @@ LLM-driven Playwright MCP for **automated testing** and **demo videos**.
 Capture: synthetic cursor + always-on click highlight, **1920×1080 @ deviceScaleFactor 2**, WebM→H.264 **60fps `minterpolate`**, smooth rAF scroll.  
 Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 
+### Install
+
+| Client | Guide |
+| --- | --- |
+| Cursor | [docs/INSTALL-CURSOR.md](docs/INSTALL-CURSOR.md) |
+| Cursor CLI | [docs/INSTALL-CURSOR-CLI.md](docs/INSTALL-CURSOR-CLI.md) |
+| Claude Desktop | [docs/INSTALL-CLAUDE.md](docs/INSTALL-CLAUDE.md) |
+| Claude CLI | [docs/INSTALL-CLAUDE-CLI.md](docs/INSTALL-CLAUDE-CLI.md) |
+
 ## Workflows
 
 ### Automated testing
@@ -25,7 +34,7 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 
 **Demo vs testing:** Recording sessions conjoin speech and UI on the server. Testing sessions (no `recordVideoPath`) keep snappy `startMs`/`endMs` pacing.
 
-**Restricted auth:** When Google/OAuth blocks automation, give the user the app URL + console snippet from `set_session_auth`, paste credentials, then `start_session` with the returned `profileId`.
+**Restricted auth:** For Google OAuth / Sign in with Google (and Microsoft, Discord, Cloudflare bot walls, etc.), do **not** use headed `login`. Immediately give the user the login URL, Network → Cookie header steps, and the console snippet from MCP instructions; then `set_session_auth` with their paste → `start_session({ profileId })`.
 
 ## Tools & type examples
 
@@ -71,7 +80,7 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 // → { ok: true, profileId: "prof_…", strategy: "restricted_auth", sessionId?: "sess_…" }
 ```
 
-Use when the user must log in in their own browser (Google/bot-blocked OAuth). Accepts snippet JSON or Playwright `storageState`. Always saves a reusable `profileId`.
+Use when the user must log in in their own browser. **Always** (Google OAuth / Sign in with Google, Microsoft, Apple, Discord, Cloudflare Turnstile, Okta/Auth0 social). Accepts Network Cookie-header snippet JSON or Playwright `storageState`. Always saves a reusable `profileId`.
 
 ### `start_session`
 

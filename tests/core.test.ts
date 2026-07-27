@@ -837,9 +837,16 @@ describe("cursor steps + demo instructions", () => {
   });
 
   it("SERVER_INSTRUCTIONS describe restricted auth workflow", () => {
-    expect(SERVER_INSTRUCTIONS).toContain("Restricted auth");
     expect(SERVER_INSTRUCTIONS).toContain("set_session_auth");
-    expect(SERVER_INSTRUCTIONS).toContain("httpOnly");
+    expect(SERVER_INSTRUCTIONS).toContain("Google OAuth");
+    expect(SERVER_INSTRUCTIONS).toContain("Sign in with Google");
+    expect(SERVER_INSTRUCTIONS).toContain("Microsoft");
+    expect(SERVER_INSTRUCTIONS).toContain("Discord");
+    expect(SERVER_INSTRUCTIONS).toContain("Cloudflare");
+    expect(SERVER_INSTRUCTIONS).toContain("IMMEDIATELY");
+    expect(SERVER_INSTRUCTIONS).toContain("Cookie request header");
+    expect(SERVER_INSTRUCTIONS).toContain("allow pasting");
+    expect(SERVER_INSTRUCTIONS).toContain("LOGIN_URL");
   });
 });
 
