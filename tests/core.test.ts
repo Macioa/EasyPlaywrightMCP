@@ -16,6 +16,7 @@ import { convertVf, convertArgs } from "../src/compile/convert.js";
 import { captionsFilter } from "../src/compile/captions.js";
 import { slateHtml } from "../src/compile/slate.js";
 import { SERVER_INSTRUCTIONS } from "../src/server.js";
+import { sleep } from "../src/util/sleep.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -428,6 +429,71 @@ describe("session lifecycle + orchestrate", () => {
       await sessionManager.end(started.sessionId);
     } finally {
       await fx.close();
+    }
+  });
+
+  it("recording sessions stamp video timestamps and write cues.json", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><button id="go">Go</button></body></html>`);
+    });
+    const videoPath = path.join(os.tmpdir(), `epm-rec-${Date.now()}.webm`);
+    const cuesPath = videoPath.replace(/\.webm$/i, "") + ".cues.json";
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+        recordVideoPath: videoPath,
+      });
+      expect(started.demoMode).toBe(true);
+      expect(started.recording).toBe(true);
+      const session = sessionManager.get(started.sessionId);
+      expect(session.recordingStartedAt).toBeTypeOf("number");
+      expect(session.demoMode).toBe(true);
+
+      await sleep(80);
+      const results = await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "click",
+            description: "Click Go",
+            startMs: 0,
+            endMs: 200,
+            selector: "#go",
+            speed: "fast",
+          },
+          {
+            action: "wait",
+            description: "Brief dwell",
+            startMs: 200,
+            endMs: 350,
+          },
+        ],
+      });
+      expect(results.every((r) => r.ok)).toBe(true);
+      expect(results.every((r) => typeof r.videoStartMs === "number")).toBe(true);
+      expect(results.every((r) => typeof r.videoEndMs === "number")).toBe(true);
+      expect(results[0]!.videoStartMs!).toBeGreaterThanOrEqual(0);
+      expect(results[1]!.videoStartMs!).toBeGreaterThanOrEqual(results[0]!.videoStartMs!);
+      expect(results[1]!.videoEndMs!).toBeGreaterThanOrEqual(results[1]!.videoStartMs!);
+      expect(fs.existsSync(cuesPath)).toBe(true);
+      const cues = JSON.parse(fs.readFileSync(cuesPath, "utf8"));
+      expect(cues.cues).toHaveLength(2);
+      expect(cues.actionSpan.startMs).toBeLessThanOrEqual(cues.actionSpan.endMs);
+      expect(cues.cues[0].text).toBe("Click Go");
+
+      const ended = await sessionManager.end(started.sessionId);
+      expect(ended.ok).toBe(true);
+    } finally {
+      await fx.close();
+      for (const p of [videoPath, cuesPath]) {
+        try {
+          fs.unlinkSync(p);
+        } catch {
+          /* ignore */
+        }
+      }
     }
   });
 });

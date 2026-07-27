@@ -130,6 +130,14 @@ export const StartSessionInputSchema = z.object({
     .string()
     .optional()
     .describe("If set, record WebM to this path; omit to skip recording"),
+  narrate: z
+    .boolean()
+    .optional()
+    .describe(
+      "When recording, auto-pace actions to TTS (default true). Set false for silent recording."
+    ),
+  voice: z.string().optional().describe("edge-tts voice for demoMode (default en-US-AndrewNeural)"),
+  rate: z.string().optional().describe("edge-tts rate for demoMode (default +10%)"),
   profileId: z.string().optional().describe("Auth profile from login"),
   storageStatePath: z
     .string()
@@ -144,6 +152,7 @@ export type StartSessionInput = z.infer<typeof StartSessionInputSchema>;
  *   "sessionId": "sess_01HXYZ",
  *   "headed": false,
  *   "recording": true,
+ *   "demoMode": true,
  *   "startUrl": "https://app.example.com/dashboard"
  * }
  * ```
@@ -152,6 +161,7 @@ export const StartSessionResultSchema = z.object({
   sessionId: z.string(),
   headed: z.boolean(),
   recording: z.boolean(),
+  demoMode: z.boolean().optional(),
   startUrl: z.string().optional(),
 });
 export type StartSessionResult = z.infer<typeof StartSessionResultSchema>;
@@ -252,6 +262,14 @@ export const CommandResultSchema = z.object({
   ok: z.boolean(),
   reason: z.string().optional(),
   durationMs: z.number().optional(),
+  /** Offset ms from recordingStartedAt when the action began (recording sessions). */
+  videoStartMs: z.number().optional(),
+  /** Offset ms from recordingStartedAt when the action (and VO hold) finished. */
+  videoEndMs: z.number().optional(),
+  narrationText: z.string().optional(),
+  narrationStartMs: z.number().optional(),
+  narrationEndMs: z.number().optional(),
+  audioPath: z.string().optional(),
 });
 export type CommandResult = z.infer<typeof CommandResultSchema>;
 

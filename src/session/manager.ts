@@ -22,6 +22,12 @@ export interface ActiveSession {
   recordVideoPath?: string;
   videoPath?: string;
   startUrl?: string;
+  /** Wall-clock epoch when recording timeline starts (after goto). */
+  recordingStartedAt?: number;
+  /** Auto-pace actions to TTS; default true when recording unless narrate:false. */
+  demoMode: boolean;
+  voice: string;
+  rate: string;
 }
 
 export class SessionManager {
@@ -127,6 +133,12 @@ export class SessionManager {
       await page.goto(input.startUrl, { waitUntil: "domcontentloaded" });
     }
 
+    const recording = Boolean(recordDir);
+    const demoMode = recording && input.narrate !== false;
+    const voice = input.voice ?? "en-US-AndrewNeural";
+    const rate = input.rate ?? "+10%";
+    const recordingStartedAt = recording ? Date.now() : undefined;
+
     const session: ActiveSession = {
       sessionId,
       browser,
@@ -137,13 +149,18 @@ export class SessionManager {
       recordDir,
       recordVideoPath,
       startUrl: input.startUrl,
+      recordingStartedAt,
+      demoMode,
+      voice,
+      rate,
     };
     this.sessions.set(sessionId, session);
 
     return {
       sessionId,
       headed,
-      recording: Boolean(recordDir),
+      recording,
+      demoMode,
       startUrl: input.startUrl,
     };
   }

@@ -7,6 +7,7 @@ import type {
   OrchestrateSessionInput,
 } from "../types/schemas.js";
 import type { ActiveSession } from "../session/manager.js";
+import { buildCuesFile, writeCuesFile } from "../session/cues.js";
 import { sleep } from "../util/sleep.js";
 
 /** Cursor move step count. Exported for unit tests. */
@@ -159,6 +160,11 @@ async function runOne(page: Page, action: OrchestrateAction): Promise<void> {
   }
 }
 
+function videoOffsetMs(session: ActiveSession): number | undefined {
+  if (session.recordingStartedAt === undefined) return undefined;
+  return Math.max(0, Date.now() - session.recordingStartedAt);
+}
+
 export function formatStepsMarkdown(
   sessionId: string,
   results: CommandResult[]
@@ -169,12 +175,12 @@ export function formatStepsMarkdown(
     `- sessionId: \`${sessionId}\``,
     `- generated: ${new Date().toISOString()}`,
     ``,
-    `| # | description | action | startMs | endMs | ok | reason |`,
-    `|---|-------------|--------|---------|-------|----|--------|`,
+    `| # | description | action | startMs | endMs | videoStartMs | videoEndMs | ok | reason |`,
+    `|---|-------------|--------|---------|-------|--------------|------------|----|--------|`,
   ];
   for (const r of results) {
     lines.push(
-      `| ${r.index} | ${r.description.replace(/\|/g, "\\|")} | ${r.action} | ${r.startMs} | ${r.endMs} | ${r.ok} | ${(r.reason ?? "").replace(/\|/g, "\\|")} |`
+      `| ${r.index} | ${r.description.replace(/\|/g, "\\|")} | ${r.action} | ${r.startMs} | ${r.endMs} | ${r.videoStartMs ?? ""} | ${r.videoEndMs ?? ""} | ${r.ok} | ${(r.reason ?? "").replace(/\|/g, "\\|")} |`
     );
   }
   lines.push(``);
@@ -183,6 +189,10 @@ export function formatStepsMarkdown(
     lines.push(``);
     lines.push(`- action: \`${r.action}\``);
     lines.push(`- window: ${r.startMs}–${r.endMs} ms`);
+    if (r.videoStartMs !== undefined && r.videoEndMs !== undefined) {
+      lines.push(`- video: ${r.videoStartMs}–${r.videoEndMs} ms`);
+    }
+    if (r.narrationText) lines.push(`- narration: ${r.narrationText}`);
     lines.push(`- result: ${r.ok ? "success" : "failure"}`);
     if (r.reason) lines.push(`- reason: ${r.reason}`);
     if (r.durationMs !== undefined) lines.push(`- durationMs: ${r.durationMs}`);
@@ -200,6 +210,7 @@ export async function orchestrateSession(
   const t0 = Date.now();
   // Normalize so a batch that continues a prior timeline (e.g. startMs: 12300)
   // plays from 0 without dead air; preserve relative gaps. Log original times.
+  // (demoMode TTS pacing in a later change will skip these sleeps.)
   const paceOffset = input.commands[0]?.startMs ?? 0;
 
   for (let i = 0; i < input.commands.length; i++) {
@@ -209,10 +220,13 @@ export async function orchestrateSession(
     if (pacedStart > elapsed) {
       await sleep(pacedStart - elapsed);
     }
+    const videoStartMs = videoOffsetMs(session);
     const start = Date.now();
+    const narrationText = cmd.description;
     try {
       await runOne(page, cmd);
       const durationMs = Date.now() - start;
+      const videoEndMs = videoOffsetMs(session);
       results.push({
         index: i,
         description: cmd.description,
@@ -221,8 +235,14 @@ export async function orchestrateSession(
         endMs: cmd.endMs,
         ok: true,
         durationMs,
+        videoStartMs,
+        videoEndMs,
+        narrationText,
+        narrationStartMs: videoStartMs,
+        narrationEndMs: videoEndMs,
       });
     } catch (err) {
+      const videoEndMs = videoOffsetMs(session);
       results.push({
         index: i,
         description: cmd.description,
@@ -232,8 +252,24 @@ export async function orchestrateSession(
         ok: false,
         reason: err instanceof Error ? err.message : String(err),
         durationMs: Date.now() - start,
+        videoStartMs,
+        videoEndMs,
+        narrationText,
+        narrationStartMs: videoStartMs,
+        narrationEndMs: videoEndMs,
       });
     }
+  }
+
+  if (session.recordVideoPath && session.recordingStartedAt !== undefined) {
+    const cues = buildCuesFile(
+      session.sessionId,
+      session.recordVideoPath,
+      results,
+      session.voice,
+      session.rate
+    );
+    writeCuesFile(cues);
   }
 
   if (input.recordStepsPath) {
