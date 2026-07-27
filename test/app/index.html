@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Home — Test App</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" aria-label="Main navigation">
+      <p class="brand">TestApp</p>
+      <a class="nav-link active" href="index.html" data-nav="home">Home</a>
+      <a class="nav-link" href="widgets.html" data-nav="widgets">Widgets</a>
+      <a class="nav-link" href="forms.html" data-nav="forms">Forms</a>
+      <a class="nav-link" href="about.html" data-nav="about">About</a>
+    </aside>
+    <main class="main" id="page-home">
+      <h1>Home</h1>
+      <p class="subtitle">Simple multi-page app for Playwright MCP navigation tests.</p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h3>Active sessions</h3>
+          <p>Mock metric</p>
+          <div class="stat" id="stat-sessions">12</div>
+        </div>
+        <div class="card">
+          <h3>Pending tasks</h3>
+          <p>Mock metric</p>
+          <div class="stat" id="stat-tasks">4</div>
+        </div>
+        <div class="card">
+          <h3>Status</h3>
+          <p>System health</p>
+          <div class="stat"><span class="badge ok" id="status-badge">Healthy</span></div>
+        </div>
+      </div>
+
+      <h2>Quick actions</h2>
+      <div class="btn-row">
+        <button type="button" class="primary" id="btn-refresh" data-testid="btn-refresh">Refresh stats</button>
+        <button type="button" id="btn-increment" data-testid="btn-increment">Increment tasks</button>
+        <button type="button" class="danger" id="btn-reset" data-testid="btn-reset">Reset</button>
+        <a class="btn" href="widgets.html" data-testid="link-to-widgets">Go to Widgets</a>
+        <a class="btn" href="forms.html" data-testid="link-to-forms">Go to Forms</a>
+      </div>
+      <div class="toast" id="home-toast" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Widgets — Test App</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" aria-label="Main navigation">
+      <p class="brand">TestApp</p>
+      <a class="nav-link" href="index.html" data-nav="home">Home</a>
+      <a class="nav-link active" href="widgets.html" data-nav="widgets">Widgets</a>
+      <a class="nav-link" href="forms.html" data-nav="forms">Forms</a>
+      <a class="nav-link" href="about.html" data-nav="about">About</a>
+    </aside>
+    <main class="main" id="page-widgets">
+      <h1>Widgets</h1>
+      <p class="subtitle">Interactive controls for click / toggle / slider tests.</p>
+
+      <section class="widget-panel">
+        <h2>Counter</h2>
+        <p>Count: <strong id="counter-value" data-testid="counter-value">0</strong></p>
+        <div class="btn-row">
+          <button type="button" id="btn-dec" data-testid="btn-dec">−</button>
+          <button type="button" class="primary" id="btn-inc" data-testid="btn-inc">+</button>
+          <button type="button" id="btn-counter-reset" data-testid="btn-counter-reset">Reset</button>
+        </div>
+      </section>
+
+      <section class="widget-panel">
+        <h2>Slider &amp; progress</h2>
+        <div class="slider-row">
+          <label for="volume">Volume</label>
+          <input type="range" id="volume" data-testid="volume" min="0" max="100" value="40" />
+          <span id="volume-label" data-testid="volume-label">40%</span>
+        </div>
+        <div class="progress" aria-hidden="true">
+          <span id="volume-bar" style="width: 40%"></span>
+        </div>
+      </section>
+
+      <section class="widget-panel">
+        <h2>Toggle</h2>
+        <label class="toggle">
+          <input type="checkbox" id="feature-toggle" data-testid="feature-toggle" />
+          <span class="toggle-track"></span>
+          <span id="toggle-label" data-testid="toggle-label">Feature off</span>
+        </label>
+      </section>
+
+      <section class="widget-panel">
+        <h2>Tabs</h2>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab active" role="tab" data-tab="alpha" data-testid="tab-alpha" aria-selected="true">Alpha</button>
+          <button type="button" class="tab" role="tab" data-tab="beta" data-testid="tab-beta" aria-selected="false">Beta</button>
+          <button type="button" class="tab" role="tab" data-tab="gamma" data-testid="tab-gamma" aria-selected="false">Gamma</button>
+        </div>
+        <div class="tab-panel active" id="panel-alpha" role="tabpanel" data-testid="panel-alpha">Alpha panel content</div>
+        <div class="tab-panel" id="panel-beta" role="tabpanel" data-testid="panel-beta">Beta panel content</div>
+        <div class="tab-panel" id="panel-gamma" role="tabpanel" data-testid="panel-gamma">Gamma panel content</div>
+      </section>
+
+      <div class="btn-row">
+        <a class="btn" href="forms.html" data-testid="link-to-forms">Continue to Forms</a>
+        <a class="btn" href="index.html" data-testid="link-to-home">Back to Home</a>
+      </div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

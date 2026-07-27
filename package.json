@@ -1,0 +1,40 @@
+{
+  "name": "easy-playwright-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for LLM-driven Playwright automated testing and demo videos",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "easy-playwright-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "playwright install chromium"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "playwright",
+    "testing",
+    "demo-video"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "playwright": "^1.52.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

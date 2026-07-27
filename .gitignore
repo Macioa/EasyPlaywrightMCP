@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Local scratch / auth (if ever written into the repo)
+scratch/
+.auth/
+storageState.json
+
+# Test / coverage
+coverage/
+test-results/
+playwright-report/
+.vitest/
+
+# Media artifacts (demo recordings, TTS, compile output)
+*.webm
+*.mp4
+*.wav
+*.mp3
+*.mov
+*.mkv
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*~
