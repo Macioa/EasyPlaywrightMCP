@@ -175,7 +175,7 @@ export const CursorSpeedSchema = z
   .enum(["fast", "slow", "timed"])
   .default("fast")
   .describe(
-    "Cursor motion: fast (~8 steps, default), slow (~40), timed (steps from startMs/endMs, capped ~30). Prefer fast for demos."
+    "Cursor motion: fast (~8 steps, default), slow (~40), timed (steps from startMs/endMs, capped ~30)."
   );
 
 /**

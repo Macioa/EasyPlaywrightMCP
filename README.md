@@ -18,12 +18,12 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 ### Demo videos
 
 1. `login` if auth is needed
-2. `start_session` with `recordVideoPath`
-3. Loop: `query_session` → `orchestrate_session` with `recordStepsPath`
-4. `end_session` on every session
-5. Review MD logs → `compile_demo`
+2. `start_session` with `recordVideoPath` (demoMode / auto-narrate on by default)
+3. Loop: `query_session` → `orchestrate_session` — put spoken lines in `description` / `narration`; server TTS + holds
+4. `end_session` (finalizes WebM, trims idle, writes/updates `.cues.json`)
+5. `compile_demo` with clip `videoPath` only (loads cues automatically)
 
-**Demo interaction style:** short/direct; `speed: "fast"`; `fill: false` (live typing at delay 8); each `orchestrate_session` clock starts at 0 (do not continue prior timelines); short dwells; minimal scroll; batch related actions in one call.
+**Demo vs testing:** Recording sessions conjoin speech and UI on the server. Testing sessions (no `recordVideoPath`) keep snappy `startMs`/`endMs` pacing.
 
 ## Tools & type examples
 
@@ -57,10 +57,13 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 {
   startUrl?: "https://app.example.com/dashboard",
   headed?: false,
-  recordVideoPath?: "C:/Videos/clip.webm", // omit = no record
+  recordVideoPath?: "C:/Videos/clip.webm", // omit = no record; set => demoMode
+  narrate?: true, // default true when recording; false = silent capture
+  voice?: "en-US-AndrewNeural",
+  rate?: "+10%",
   profileId?: "prof_abc"
 }
-// → { sessionId: "sess_…", headed: false, recording: true, startUrl?: "…" }
+// → { sessionId: "sess_…", headed: false, recording: true, demoMode: true, startUrl?: "…" }
 ```
 
 ### `query_sessions` / `query_session`
@@ -80,15 +83,19 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
   commands: [
     {
       action: "click", // move|click|tap|type|press|scroll|wait|navigate|select|hover
-      description: "Open Settings from the sidebar",
-      startMs: 0,
-      endMs: 600,
+      description: "Open Settings from the sidebar", // also default VO text in demoMode
+      narration?: "Spoken override",
+      skipNarration?: false,
+      startMs: 0, // ignored for pacing while recording
+      endMs: 1000,
       selector: "nav >> text=Settings",
-      speed: "fast" // fast (default) | slow | timed
+      speed: "fast", // fast (default) | slow | timed
+      fill?: false // demos: false for live typing
     }
   ]
 }
-// → { commands: [{ index, description, action, startMs, endMs, ok, reason? }] }
+// → { commands: [{ index, description, action, startMs, endMs, videoStartMs?, videoEndMs?, ok, reason? }] }
+// Recording also writes C:/Videos/clip.cues.json
 ```
 
 ### `end_session`
@@ -115,8 +122,7 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
     },
     {
       kind: "clip",
-      videoPath: "C:/Videos/clip.webm",
-      narration: [{ startMs: 0, endMs: 5000, text: "Opening settings." }]
+      videoPath: "C:/Videos/clip.webm" // loads clip.cues.json automatically
     }
   ]
 }

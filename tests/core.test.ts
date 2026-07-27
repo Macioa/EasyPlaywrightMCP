@@ -646,10 +646,11 @@ describe("cursor steps + demo instructions", () => {
     ).toBe(10); // 160/16 = 10, above min 8
   });
 
-  it("SERVER_INSTRUCTIONS include demo interaction style", () => {
-    expect(SERVER_INSTRUCTIONS).toContain("Demo interaction style");
+  it("SERVER_INSTRUCTIONS describe server-paced demo narration", () => {
+    expect(SERVER_INSTRUCTIONS).toContain("server-paced narration");
+    expect(SERVER_INSTRUCTIONS).toContain("cues.json");
+    expect(SERVER_INSTRUCTIONS).toContain("conjoined");
     expect(SERVER_INSTRUCTIONS).toContain("fill=false");
-    expect(SERVER_INSTRUCTIONS).toContain('speed "fast"');
   });
 });
 
