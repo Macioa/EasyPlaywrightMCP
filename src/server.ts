@@ -4,9 +4,11 @@ import {
   LoginInputSchema,
   OrchestrateSessionInputSchema,
   SessionIdentitySchema,
+  SetSessionAuthInputSchema,
   StartSessionInputSchema,
 } from "./types/schemas.js";
 import { handleLogin } from "./tools/login.js";
+import { handleSetSessionAuth } from "./tools/setSessionAuth.js";
 import { handleStartSession } from "./tools/startSession.js";
 import { handleQuerySessions } from "./tools/querySessions.js";
 import { handleQuerySession } from "./tools/querySession.js";
@@ -19,13 +21,14 @@ export const SERVER_INSTRUCTIONS = `EasyPlaywrightMCP — LLM-driven Playwright 
 
 ## Workflow A — Automated testing
 1. login — save auth profile (password, tokens, OAuth, or manual window)
+   - Restricted auth (Google/OAuth bot-blocked): skip headed login; use set_session_auth instead (see Restricted auth below)
 2. start_session — open a session (usually headed=false); pass profileId; do NOT set recordVideoPath
 3. Loop: query_session → orchestrate_session until the task is done
 4. end_session
 5. Report a concise short answer to the user (pass/fail + key findings)
 
 ## Workflow B — Demo videos (server-paced narration)
-1. login — save auth profile if the flow needs auth
+1. login — save auth profile if the flow needs auth (or set_session_auth for restricted providers)
 2. start_session with recordVideoPath (demoMode on by default; narrate:false for silent capture)
 3. Loop: query_session → orchestrate_session
    - Put the spoken sentence in description (or narration). Server synthesizes TTS, acts, and holds until VO ends.
@@ -34,6 +37,33 @@ export const SERVER_INSTRUCTIONS = `EasyPlaywrightMCP — LLM-driven Playwright 
 4. end_session — finalizes WebM, trims idle head/tail, rewrites cues.json
 5. compile_demo — pass videoPath only for clips (loads sibling .cues.json automatically). Optional slates for intros.
 6. Do NOT hand-author clip narration timestamps when cues.json exists — the server wins.
+
+## Restricted auth (Google / bot-blocked OAuth)
+When automation cannot complete login (Google, Discord, similar), do NOT rely on headed login:
+1. Give the user the app login/site URL and this console snippet (run on the **app** origin after they are logged in — not only the Google interstitial):
+\`\`\`js
+(() => {
+  const ls = [], ss = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const name = localStorage.key(i);
+    ls.push({ name, value: localStorage.getItem(name) });
+  }
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const name = sessionStorage.key(i);
+    ss.push({ name, value: sessionStorage.getItem(name) });
+  }
+  const cookies = document.cookie.split(";").map((c) => {
+    const i = c.indexOf("=");
+    const name = c.slice(0, i).trim();
+    const value = c.slice(i + 1).trim();
+    return { name, value, domain: location.hostname, path: "/" };
+  }).filter((c) => c.name);
+  return JSON.stringify({ origin: location.origin, url: location.href, cookies, localStorage: ls, sessionStorage: ss }, null, 2);
+})()
+\`\`\`
+2. httpOnly caveat: document.cookie cannot read httpOnly cookies (e.g. Clerk __session). Ask the user to also copy those from DevTools → Application → Cookies as { name, value, domain, path, httpOnly, secure, sameSite } and merge into cookies[].
+3. Call set_session_auth with the pasted JSON → profileId (optional sessionId to inject into a live session).
+4. start_session({ profileId }) as usual.
 
 ## Testing vs demo timing
 - Testing (no recordVideoPath): snappy startMs/endMs pacing; fill=true OK.
@@ -62,6 +92,7 @@ export function createServer(): McpServer {
     `Orchestrate login and persist Playwright storageState.
 Strategies: password form, HTTP Basic, bearer/token inject, OAuth cookies/tokens, manual/OAuth window, reuse profileId.
 Auto (headless) when enough creds/tokens are provided; otherwise opens a headed window and waits.
+For Google/bot-blocked OAuth, prefer set_session_auth (user's own browser + paste) instead of headed login.
 
 Example input:
 \`\`\`json
@@ -78,11 +109,50 @@ Example success: { "ok": true, "profileId": "prof_abc", "strategy": "password" }
   );
 
   server.tool(
+    "set_session_auth",
+    `Set Playwright auth from credentials the user extracted in their own browser (restricted Google/OAuth).
+Instruct the user to open the app URL, log in, then run this console snippet on the **app** origin and paste the JSON:
+\`\`\`js
+(() => {
+  const ls = [], ss = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const name = localStorage.key(i);
+    ls.push({ name, value: localStorage.getItem(name) });
+  }
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const name = sessionStorage.key(i);
+    ss.push({ name, value: sessionStorage.getItem(name) });
+  }
+  const cookies = document.cookie.split(";").map((c) => {
+    const i = c.indexOf("=");
+    const name = c.slice(0, i).trim();
+    const value = c.slice(i + 1).trim();
+    return { name, value, domain: location.hostname, path: "/" };
+  }).filter((c) => c.name);
+  return JSON.stringify({ origin: location.origin, url: location.href, cookies, localStorage: ls, sessionStorage: ss }, null, 2);
+})()
+\`\`\`
+httpOnly cookies (e.g. Clerk __session) are invisible to document.cookie — ask the user to merge DevTools Application → Cookies entries ({ name, value, domain, path, httpOnly, secure, sameSite }) into cookies[].
+Also accepts Playwright storageState JSON. Always saves profileId; pass sessionId to inject into a live session.
+
+Example:
+\`\`\`json
+{
+  "siteUrl": "https://app.example.com/dashboard",
+  "credentialsJson": "{\\"origin\\":\\"https://app.example.com\\",\\"cookies\\":[{\\"name\\":\\"session\\",\\"value\\":\\"abc\\",\\"domain\\":\\"app.example.com\\",\\"path\\":\\"/\\"}],\\"localStorage\\":[],\\"sessionStorage\\":[]}"
+}
+\`\`\`
+Returns: { "ok": true, "profileId": "prof_…", "strategy": "restricted_auth" }`,
+    SetSessionAuthInputSchema.shape,
+    async (args) => handleSetSessionAuth(SetSessionAuthInputSchema.parse(args))
+  );
+
+  server.tool(
     "start_session",
     `Start a Playwright Chromium session (headless or windowed) and keep it open.
 Optional recordVideoPath enables WebM capture at 1920×1080 @ deviceScaleFactor 2 with synthetic cursor and always-on click highlight.
 When recording, demoMode is on (narrate defaults true): orchestrate auto-paces to TTS.
-Pass profileId from login to reuse auth.
+Pass profileId from login or set_session_auth to reuse auth.
 
 Example:
 \`\`\`json

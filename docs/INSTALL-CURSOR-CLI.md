@@ -35,4 +35,4 @@ Or write `%USERPROFILE%\.cursor\mcp.json`:
 cursor mcp list
 ```
 
-You should see `EasyPlaywrightMCP` with the seven tools available in agent sessions.
+You should see `EasyPlaywrightMCP` with the eight tools available in agent sessions.

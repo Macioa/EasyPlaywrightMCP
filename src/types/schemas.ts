@@ -381,3 +381,45 @@ export const OkResultSchema = z.object({
   videoPath: z.string().optional(),
 });
 export type OkResult = z.infer<typeof OkResultSchema>;
+
+/** Example:
+ * ```json
+ * {
+ *   "siteUrl": "https://app.example.com/dashboard",
+ *   "credentialsJson": "{\"origin\":\"https://app.example.com\",\"cookies\":[{\"name\":\"session\",\"value\":\"abc\",\"domain\":\"app.example.com\",\"path\":\"/\"}],\"localStorage\":[],\"sessionStorage\":[]}",
+ *   "sessionId": "sess_01HXYZ"
+ * }
+ * ```
+ */
+export const SetSessionAuthInputSchema = z.object({
+  siteUrl: z.string().url().describe("Target application URL (inject / navigate origin)"),
+  credentialsJson: z
+    .string()
+    .describe(
+      "JSON paste from the browser snippet (cookies/localStorage/sessionStorage) or Playwright storageState"
+    ),
+  sessionId: z
+    .string()
+    .optional()
+    .describe("If set, also inject credentials into this live session"),
+  authUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe("Optional auth URL for profile meta (defaults to siteUrl)"),
+});
+export type SetSessionAuthInput = z.infer<typeof SetSessionAuthInputSchema>;
+
+/** Example:
+ * ```json
+ * { "ok": true, "profileId": "prof_abc", "sessionId": "sess_01HXYZ", "strategy": "restricted_auth" }
+ * ```
+ */
+export const SetSessionAuthResultSchema = z.object({
+  ok: z.boolean(),
+  profileId: z.string().optional(),
+  sessionId: z.string().optional(),
+  strategy: z.string().optional(),
+  reason: z.string().optional(),
+});
+export type SetSessionAuthResult = z.infer<typeof SetSessionAuthResultSchema>;

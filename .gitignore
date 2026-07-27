@@ -14,6 +14,8 @@ dist/
 scratch/
 .auth/
 storageState.json
+*.tmp-*-creds.*
+.tmp-*
 
 # Test / coverage
 coverage/
@@ -21,13 +23,20 @@ test-results/
 playwright-report/
 .vitest/
 
-# Media artifacts (demo recordings, TTS, compile output)
+# Media artifacts (demo recordings, TTS, compile output, screenshots)
+test/videos/
 *.webm
 *.mp4
 *.wav
 *.mp3
 *.mov
 *.mkv
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.cues.json
 
 # Logs & OS
 *.log

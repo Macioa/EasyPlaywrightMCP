@@ -11,7 +11,8 @@ import { captureContextOptions, injectCaptureHelpers } from "../browser/context.
 import { ensureDataDirs, storageStatePath, VIEWPORT } from "../paths.js";
 import { readCuesFile } from "./cues.js";
 import { trimVideoToActionSpan } from "../compile/trim.js";
-import type { StartSessionInput, StartSessionResult } from "../types/schemas.js";
+import type { StartSessionInput, StartSessionResult, CookieInput, StorageEntry } from "../types/schemas.js";
+import { injectCredentials } from "../auth/inject.js";
 
 export interface ActiveSession {
   sessionId: string;
@@ -87,6 +88,19 @@ export class SessionManager {
     const s = this.sessions.get(sessionId);
     if (!s) throw new Error(`Unknown session: ${sessionId}`);
     return s;
+  }
+
+  async applyAuth(
+    sessionId: string,
+    auth: {
+      siteUrl: string;
+      cookies?: CookieInput[];
+      localStorage?: StorageEntry[];
+      sessionStorage?: StorageEntry[];
+    }
+  ): Promise<void> {
+    const s = this.get(sessionId);
+    await injectCredentials(s.context, s.page, auth.siteUrl, auth);
   }
 
   async start(input: StartSessionInput): Promise<StartSessionResult> {

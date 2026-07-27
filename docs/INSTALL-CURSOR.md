@@ -28,7 +28,7 @@ Typical config paths:
 - Project: `.cursor/mcp.json`
 - User: `%USERPROFILE%\.cursor\mcp.json`
 
-3. Restart Cursor (or reload MCP servers). Confirm tools: `login`, `start_session`, `query_sessions`, `query_session`, `orchestrate_session`, `end_session`, `compile_demo`.
+3. Restart Cursor (or reload MCP servers). Confirm tools: `login`, `set_session_auth`, `start_session`, `query_sessions`, `query_session`, `orchestrate_session`, `end_session`, `compile_demo`.
 
 ## Prerequisites
 

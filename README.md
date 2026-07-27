@@ -9,7 +9,7 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 
 ### Automated testing
 
-1. `login` → save `profileId`
+1. `login` → save `profileId` (or `set_session_auth` for Google/bot-blocked OAuth)
 2. `start_session` (usually headless) with `profileId`
 3. Loop: `query_session` → `orchestrate_session`
 4. `end_session`
@@ -17,13 +17,15 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 
 ### Demo videos
 
-1. `login` if auth is needed
+1. `login` if auth is needed (or `set_session_auth` for restricted providers)
 2. `start_session` with `recordVideoPath` (demoMode / auto-narrate on by default)
 3. Loop: `query_session` → `orchestrate_session` — put spoken lines in `description` / `narration`; server TTS + holds
 4. `end_session` (finalizes WebM, trims idle, writes/updates `.cues.json`)
 5. `compile_demo` with clip `videoPath` only (loads cues automatically)
 
 **Demo vs testing:** Recording sessions conjoin speech and UI on the server. Testing sessions (no `recordVideoPath`) keep snappy `startMs`/`endMs` pacing.
+
+**Restricted auth:** When Google/OAuth blocks automation, give the user the app URL + console snippet from `set_session_auth`, paste credentials, then `start_session` with the returned `profileId`.
 
 ## Tools & type examples
 
@@ -50,6 +52,26 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 ```
 
 **Strategies:** `password` · `http_basic` · `token_inject` · `oauth_tokens` · `manual` (headed OAuth/password window) · `reuse_profile`
+
+### `set_session_auth`
+
+```ts
+// SetSessionAuthInput
+{
+  siteUrl: "https://app.example.com/dashboard",
+  credentialsJson: JSON.stringify({
+    origin: "https://app.example.com",
+    cookies: [{ name: "session", value: "abc", domain: "app.example.com", path: "/" }],
+    localStorage: [{ name: "token", value: "eyJ..." }],
+    sessionStorage: []
+  }),
+  sessionId?: "sess_…", // optional: also inject into a live session
+  authUrl?: "https://app.example.com/login"
+}
+// → { ok: true, profileId: "prof_…", strategy: "restricted_auth", sessionId?: "sess_…" }
+```
+
+Use when the user must log in in their own browser (Google/bot-blocked OAuth). Accepts snippet JSON or Playwright `storageState`. Always saves a reusable `profileId`.
 
 ### `start_session`
 

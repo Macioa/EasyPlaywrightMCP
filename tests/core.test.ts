@@ -6,9 +6,12 @@ import {
   LoginInputSchema,
   OrchestrateActionSchema,
   OrchestrateSessionInputSchema,
+  SetSessionAuthInputSchema,
   StartSessionInputSchema,
 } from "../src/types/schemas.js";
 import { canAutoLogin, chooseStrategy, login } from "../src/auth/login.js";
+import { parseCredentialsJson } from "../src/auth/parseCredentials.js";
+import { setSessionAuth } from "../src/auth/setSessionAuth.js";
 import { sessionManager } from "../src/session/manager.js";
 import { orchestrateSession, stepsFor } from "../src/session/orchestrate.js";
 import { formatStepsMarkdown } from "../src/session/orchestrate.js";
@@ -330,6 +333,135 @@ describe("login strategies", () => {
       expect(second.ok).toBe(true);
       expect(second.strategy).toBe("reuse_profile");
       expect(second.profileId).toBe(first.profileId);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
+describe("set_session_auth / parseCredentials", () => {
+  it("parses snippet JSON and Playwright storageState", () => {
+    const snippet = parseCredentialsJson(
+      JSON.stringify({
+        origin: "https://app.example.com",
+        url: "https://app.example.com/dashboard",
+        cookies: [{ name: "session", value: "abc", domain: "app.example.com", path: "/" }],
+        localStorage: [{ name: "token", value: "tok" }],
+        sessionStorage: [{ name: "tmp", value: "1" }],
+      })
+    );
+    expect(snippet.cookies).toHaveLength(1);
+    expect(snippet.localStorage[0]?.value).toBe("tok");
+    expect(snippet.sessionStorage[0]?.name).toBe("tmp");
+    expect(snippet.origin).toBe("https://app.example.com");
+
+    const state = parseCredentialsJson(
+      JSON.stringify({
+        cookies: [
+          {
+            name: "sid",
+            value: "xyz",
+            domain: "app.example.com",
+            path: "/",
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+          },
+        ],
+        origins: [
+          {
+            origin: "https://app.example.com",
+            localStorage: [{ name: "access_token", value: "eyJ" }],
+          },
+        ],
+      })
+    );
+    expect(state.cookies[0]?.httpOnly).toBe(true);
+    expect(state.localStorage[0]?.name).toBe("access_token");
+    expect(state.origin).toBe("https://app.example.com");
+  });
+
+  it("rejects empty or invalid credentialsJson", () => {
+    expect(() => parseCredentialsJson("not-json")).toThrow(/valid JSON/);
+    expect(() => parseCredentialsJson("[]")).toThrow(/JSON object/);
+    expect(() =>
+      parseCredentialsJson(JSON.stringify({ cookies: [], localStorage: [], sessionStorage: [] }))
+    ).toThrow(/no cookies/);
+  });
+
+  it("parses SetSessionAuthInputSchema", () => {
+    const parsed = SetSessionAuthInputSchema.parse({
+      siteUrl: "https://app.example.com",
+      credentialsJson: '{"cookies":[{"name":"s","value":"1"}]}',
+      sessionId: "sess_x",
+    });
+    expect(parsed.sessionId).toBe("sess_x");
+  });
+
+  it("set_session_auth saves profile and start_session reuses it", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><h1 id="t"></h1>
+        <script>document.getElementById('t').textContent=localStorage.getItem('token')||''</script>
+      </body></html>`);
+    });
+    try {
+      const host = new URL(fx.baseUrl).hostname;
+      const result = await setSessionAuth({
+        siteUrl: fx.baseUrl,
+        credentialsJson: JSON.stringify({
+          origin: fx.baseUrl,
+          cookies: [{ name: "session", value: "ok", domain: host, path: "/" }],
+          localStorage: [{ name: "token", value: "restricted_tok" }],
+          sessionStorage: [],
+        }),
+      });
+      expect(result.ok).toBe(true);
+      expect(result.strategy).toBe("restricted_auth");
+      expect(result.profileId).toMatch(/^prof_/);
+
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+        profileId: result.profileId,
+      });
+      const page = sessionManager.get(started.sessionId).page;
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const text = await page.locator("#t").textContent();
+      expect(text).toBe("restricted_tok");
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("set_session_auth applies to a live session when sessionId is set", async () => {
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><h1 id="t"></h1>
+        <script>document.getElementById('t').textContent=localStorage.getItem('token')||''</script>
+      </body></html>`);
+    });
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+      });
+      const host = new URL(fx.baseUrl).hostname;
+      const result = await setSessionAuth({
+        siteUrl: fx.baseUrl,
+        sessionId: started.sessionId,
+        credentialsJson: JSON.stringify({
+          cookies: [{ name: "session", value: "live", domain: host, path: "/" }],
+          localStorage: [{ name: "token", value: "live_tok" }],
+          sessionStorage: [],
+        }),
+      });
+      expect(result.ok).toBe(true);
+      expect(result.sessionId).toBe(started.sessionId);
+
+      const page = sessionManager.get(started.sessionId).page;
+      const text = await page.locator("#t").textContent();
+      expect(text).toBe("live_tok");
     } finally {
       await fx.close();
     }
@@ -702,6 +834,12 @@ describe("cursor steps + demo instructions", () => {
     expect(SERVER_INSTRUCTIONS).toContain("cues.json");
     expect(SERVER_INSTRUCTIONS).toContain("conjoined");
     expect(SERVER_INSTRUCTIONS).toContain("fill=false");
+  });
+
+  it("SERVER_INSTRUCTIONS describe restricted auth workflow", () => {
+    expect(SERVER_INSTRUCTIONS).toContain("Restricted auth");
+    expect(SERVER_INSTRUCTIONS).toContain("set_session_auth");
+    expect(SERVER_INSTRUCTIONS).toContain("httpOnly");
   });
 });
 

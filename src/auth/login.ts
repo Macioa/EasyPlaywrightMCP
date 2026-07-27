@@ -8,8 +8,9 @@ import {
   profileDir,
   storageStatePath,
 } from "../paths.js";
-import type { LoginInput, LoginResult, OAuthCreds } from "../types/schemas.js";
+import type { LoginInput, LoginResult } from "../types/schemas.js";
 import { sleep } from "../util/sleep.js";
+import { injectOauthLike } from "./inject.js";
 
 export type LoginStrategy =
   | "reuse_profile"
@@ -95,126 +96,107 @@ async function firstVisible(page: Page, selectors: string[]): Promise<string | n
   return null;
 }
 
-async function applyStorageEntries(
-  page: Page,
-  localEntries?: { name: string; value: string }[],
-  sessionEntries?: { name: string; value: string }[]
-): Promise<void> {
-  await page.evaluate(
-    ({ local, session }) => {
-      for (const e of local ?? []) window.localStorage.setItem(e.name, e.value);
-      for (const e of session ?? []) window.sessionStorage.setItem(e.name, e.value);
-    },
-    { local: localEntries ?? [], session: sessionEntries ?? [] }
-  );
+function isAuthPath(pathname: string): boolean {
+  return /login|signin|sign-in|sign-up|signup|oauth|authorize|auth/i.test(pathname);
 }
 
-async function applyCookies(
+async function hasAuthCookies(
   context: BrowserContext,
-  cookies: NonNullable<OAuthCreds["cookies"]>,
-  fallbackUrl: string
-): Promise<void> {
-  const origin = new URL(fallbackUrl);
-  await context.addCookies(
-    cookies.map((c) => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain ?? origin.hostname,
-      path: c.path ?? "/",
-      httpOnly: c.httpOnly,
-      secure: c.secure ?? origin.protocol === "https:",
-      sameSite: c.sameSite ?? "Lax",
-    }))
-  );
-}
-
-async function injectOauthLike(
-  context: BrowserContext,
-  page: Page,
-  siteUrl: string,
-  oauth: OAuthCreds,
-  extraTokens?: LoginInput["tokens"]
-): Promise<void> {
-  const cookies = [
-    ...(oauth.cookies ?? []),
-    ...(extraTokens?.cookies ?? []),
-  ];
-  if (oauth.accessToken) {
-    cookies.push({
-      name: "access_token",
-      value: oauth.accessToken,
-      path: "/",
+  siteUrl: string
+): Promise<boolean> {
+  try {
+    const cookies = await context.cookies([siteUrl, new URL(siteUrl).origin]);
+    // Definitive session credentials only — Clerk's __client_uat alone is NOT enough
+    // (that marker can appear before __session is written; saving then yields a useless profile).
+    return cookies.some((c) => {
+      if (!c.value) return false;
+      return /^(__session|session|sid|access_token|id_token)$/i.test(c.name);
     });
+  } catch {
+    return false;
   }
-  if (oauth.idToken) {
-    cookies.push({ name: "id_token", value: oauth.idToken, path: "/" });
-  }
-  if (cookies.length) {
-    await applyCookies(context, cookies, siteUrl);
-  }
+}
 
-  await page.goto(siteUrl, { waitUntil: "domcontentloaded" });
-
-  const localEntries = [
-    ...(oauth.localStorage ?? []),
-    ...(extraTokens?.localStorage ?? []),
-  ];
-  if (oauth.accessToken) {
-    localEntries.push({ name: "access_token", value: oauth.accessToken });
-    localEntries.push({ name: "token", value: oauth.accessToken });
+/** True when the page has left the auth surface for the target app. */
+async function landedOnApp(page: Page, authUrl: string, siteUrl: string): Promise<boolean> {
+  let url = "";
+  try {
+    url = page.url();
+  } catch {
+    return false;
   }
-  if (extraTokens?.bearer) {
-    localEntries.push({ name: "access_token", value: extraTokens.bearer });
-    localEntries.push({ name: "token", value: extraTokens.bearer });
+  try {
+    const auth = new URL(authUrl);
+    const cur = new URL(url);
+    if (isAuthPath(cur.pathname)) return false;
+    if (cur.href.startsWith(siteUrl)) return true;
+    if (cur.origin === auth.origin && cur.pathname !== auth.pathname) return true;
+  } catch {
+    /* ignore */
   }
-  await applyStorageEntries(
-    page,
-    localEntries,
-    [...(oauth.sessionStorage ?? []), ...(extraTokens?.sessionStorage ?? [])]
-  );
-  await page.reload({ waitUntil: "domcontentloaded" });
+  return false;
 }
 
 async function looksAuthenticated(
   page: Page,
   authUrl: string,
-  siteUrl: string
+  siteUrl: string,
+  context?: BrowserContext
 ): Promise<boolean> {
-  const url = page.url();
-  try {
-    const auth = new URL(authUrl);
-    const cur = new URL(url);
-    // Left the auth path
-    if (cur.origin === auth.origin && cur.pathname !== auth.pathname) {
-      if (!/login|signin|sign-in|oauth|authorize|auth/i.test(cur.pathname)) {
-        return true;
-      }
-    }
-    if (cur.href.startsWith(siteUrl) && !/login|signin|sign-in/i.test(cur.pathname)) {
-      return true;
-    }
-  } catch {
-    /* ignore */
+  if (await landedOnApp(page, authUrl, siteUrl)) {
+    return true;
   }
 
-  // Cookie / storage heuristics
-  const hasSession = await page.evaluate(() => {
-    const keys = Object.keys(window.localStorage);
-    if (
-      keys.some(
-        (k) =>
-          /^(access_token|id_token|token|session|auth|user)$/i.test(k) &&
-          Boolean(window.localStorage.getItem(k))
-      )
-    ) {
-      return true;
-    }
-    return /(?:^|;\s*)(session|sid|auth|token|access_token)=/i.test(document.cookie);
-  });
-  return hasSession;
+  if (context && (await hasAuthCookies(context, siteUrl))) {
+    return true;
+  }
+
+  // Cookie / storage heuristics — must not throw on OAuth navigations / popups
+  try {
+    return await page.evaluate(() => {
+      const keys = Object.keys(window.localStorage);
+      if (
+        keys.some(
+          (k) =>
+            /^(access_token|id_token|token|session|auth|user)$/i.test(k) &&
+            Boolean(window.localStorage.getItem(k))
+        )
+      ) {
+        return true;
+      }
+      return /(?:^|;\s*)(__session|session|sid|auth|token|access_token)=/i.test(
+        document.cookie
+      );
+    });
+  } catch {
+    // "Execution context was destroyed" during Google/OAuth redirects
+    return false;
+  }
 }
 
-async function saveProfile(
+async function launchBrowser(headed: boolean): Promise<Browser> {
+  // Real Chrome is far more likely to complete Google/Discord OAuth than bundled Chromium.
+  // Strip automation switches so Google is less likely to reject the OAuth popup.
+  const antiDetect = {
+    ignoreDefaultArgs: ["--enable-automation"] as string[],
+    args: ["--disable-blink-features=AutomationControlled"],
+  };
+  if (headed) {
+    try {
+      return await chromium.launch({
+        headless: false,
+        channel: "chrome",
+        ...antiDetect,
+      });
+    } catch {
+      /* fall back to bundled Chromium */
+    }
+    return await chromium.launch({ headless: false, ...antiDetect });
+  }
+  return await chromium.launch({ headless: true });
+}
+
+export async function saveProfile(
   context: BrowserContext,
   meta: { siteUrl: string; authUrl: string; strategy: string }
 ): Promise<string> {
@@ -238,7 +220,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 
   let browser: Browser | undefined;
   try {
-    browser = await chromium.launch({ headless: !headed });
+    browser = await launchBrowser(headed);
     const context = await browser.newContext(
       captureContextOptions({
         httpCredentials: input.httpCredentials,
@@ -257,7 +239,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
         return { ok: false, reason: `Profile not found: ${input.profileId}`, strategy };
       }
       await page.goto(input.siteUrl, { waitUntil: "domcontentloaded" });
-      const ok = await looksAuthenticated(page, input.authUrl, input.siteUrl);
+      const ok = await looksAuthenticated(page, input.authUrl, input.siteUrl, context);
       if (!ok) {
         return {
           ok: false,
@@ -337,7 +319,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       if (!page.url().startsWith(input.siteUrl)) {
         await page.goto(input.siteUrl, { waitUntil: "domcontentloaded" }).catch(() => undefined);
       }
-      const ok = await looksAuthenticated(page, input.authUrl, input.siteUrl);
+      const ok = await looksAuthenticated(page, input.authUrl, input.siteUrl, context);
       if (!ok) {
         return { ok: false, reason: "Password login did not establish a session", strategy };
       }
@@ -349,14 +331,50 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       return { ok: true, profileId, strategy };
     }
 
-    // Manual / OAuth interactive
+    // Manual / OAuth interactive — keep browser open through Google/Discord popups.
+    // Do not let mid-redirect evaluate errors abort the flow (that closed the window).
+    const oauthPages = new Set<Page>([page]);
+    context.on("page", (p) => {
+      oauthPages.add(p);
+      p.once("close", () => oauthPages.delete(p));
+    });
+
     await page.goto(input.authUrl, { waitUntil: "domcontentloaded" });
     const deadline = Date.now() + timeoutMs;
     let authenticated = false;
     while (Date.now() < deadline) {
-      if (await looksAuthenticated(page, input.authUrl, input.siteUrl)) {
+      for (const p of [...oauthPages]) {
+        if (p.isClosed()) {
+          oauthPages.delete(p);
+          continue;
+        }
+        try {
+          if (await looksAuthenticated(p, input.authUrl, input.siteUrl, context)) {
+            authenticated = true;
+            break;
+          }
+        } catch {
+          /* popup/main navigations are expected during OAuth */
+        }
+      }
+      if (!authenticated && (await hasAuthCookies(context, input.siteUrl))) {
         authenticated = true;
-        break;
+      }
+      if (authenticated) {
+        // Prove the session sticks on the target app (Clerk otherwise redirects to sign-in).
+        try {
+          await page.goto(input.siteUrl, { waitUntil: "domcontentloaded" });
+          await sleep(800);
+          if (
+            (await landedOnApp(page, input.authUrl, input.siteUrl)) &&
+            (await hasAuthCookies(context, input.siteUrl))
+          ) {
+            break;
+          }
+        } catch {
+          /* keep waiting */
+        }
+        authenticated = false;
       }
       await sleep(500);
     }
@@ -367,6 +385,8 @@ export async function login(input: LoginInput): Promise<LoginResult> {
         strategy: "manual",
       };
     }
+    // One more settle so late Clerk cookies (__session) are present before save.
+    await sleep(500);
     const profileId = await saveProfile(context, {
       siteUrl: input.siteUrl,
       authUrl: input.authUrl,
