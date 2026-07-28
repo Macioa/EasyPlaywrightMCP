@@ -44,6 +44,8 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 
 **Restricted auth:** For Google OAuth / Sign in with Google (and Microsoft, Discord, Cloudflare bot walls, etc.), do **not** use headed `login`. Immediately give the user the login URL, Network → Cookie header steps, and the console snippet from MCP instructions; then `set_session_auth` with their paste → `start_session({ profileId })`.
 
+Per-app cookie guides: [LinkedIn](docs/restricted-auth/linkedin.md) · [G Suite / Google Workspace](docs/restricted-auth/gsuite-and-google-oauth.md)
+
 ## Tools & type examples
 
 ### `login`
