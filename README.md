@@ -14,6 +14,14 @@ Narration: Microsoft Edge neural TTS via **`edge-tts`**.
 | Claude Desktop | [docs/INSTALL-CLAUDE.md](docs/INSTALL-CLAUDE.md) |
 | Claude CLI | [docs/INSTALL-CLAUDE-CLI.md](docs/INSTALL-CLAUDE-CLI.md) |
 
+### Example prompts
+
+> Using EasyPlaywrightMCP Make a demo video of the feature in my last PR
+
+> Using EasyPlaywrightMCP Connect my google oauth and test this feature in production. Report the success or failure reason for each operation
+
+> Using EasyPlaywrightMCP Create a demo video of the steps in this MD
+
 ## Workflows
 
 ### Automated testing
@@ -168,6 +176,8 @@ Use when the user must log in in their own browser. **Always** (Google OAuth / S
 - Chromium via `npx playwright install chromium` (runs on `npm install`)
 
 ## Install
+
+> Hey Siri, install https://github.com/Macioa/EasyPlaywrightMCP to cursor
 
 | Client | Doc |
 |--------|-----|
