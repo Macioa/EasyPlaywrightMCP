@@ -189,6 +189,18 @@ async function runOne(
       await page.goto(action.url, { waitUntil: "domcontentloaded" });
       break;
     }
+    case "upload": {
+      if (!action.selector) throw new Error("upload requires selector");
+      if (!action.files?.length) throw new Error("upload requires files");
+      if (action.useFileChooser) {
+        const chooserP = page.waitForEvent("filechooser");
+        await page.locator(action.selector).first().click({ timeout: 5000 });
+        await (await chooserP).setFiles(action.files);
+      } else {
+        await page.locator(action.selector).first().setInputFiles(action.files);
+      }
+      break;
+    }
     default:
       throw new Error(`Unsupported action: ${(action as OrchestrateAction).action}`);
   }

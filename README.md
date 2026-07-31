@@ -112,7 +112,7 @@ Use when the user must log in in their own browser. **Always** (Google OAuth / S
 ```ts
 // query_session
 { sessionId: "sess_…" }
-// → { url, title, viewport, ariaSnapshot, interactive: [{ role, name, selectorHint }] }
+// → { url, title, viewport, ariaSnapshot, interactive: [{ role, name, selectorHint, inputType? }] }
 ```
 
 ### `orchestrate_session`
@@ -123,7 +123,7 @@ Use when the user must log in in their own browser. **Always** (Google OAuth / S
   recordStepsPath?: "C:/Videos/steps.md",
   commands: [
     {
-      action: "click", // move|click|tap|type|press|scroll|wait|navigate|select|hover
+      action: "click", // move|click|tap|type|press|scroll|wait|navigate|select|hover|upload
       description: "Open Settings from the sidebar", // also default VO text in demoMode
       narration?: "Spoken override",
       skipNarration?: false,
@@ -131,7 +131,9 @@ Use when the user must log in in their own browser. **Always** (Google OAuth / S
       endMs: 1000,
       selector: "nav >> text=Settings",
       speed: "fast", // fast (default) | slow | timed
-      fill?: false // demos: false for live typing
+      fill?: false, // demos: false for live typing
+      files?: ["C:/path/to/file.pdf"], // upload action
+      useFileChooser?: false // upload: click + FileChooser instead of setInputFiles
     }
   ]
 }

@@ -7,6 +7,8 @@ export interface InteractiveControl {
   tag: string;
   selectorHint: string;
   href?: string;
+  /** HTML input type when tag is input (e.g. file, text, email). */
+  inputType?: string;
 }
 
 export interface SessionPageData {
@@ -65,7 +67,11 @@ export async function querySessionPage(
           selectorHint = `${tag}[name="${html.getAttribute("name")}"]`;
         else if (name) selectorHint = `${tag}:has-text(${JSON.stringify(name.slice(0, 40))})`;
         const href = tag === "a" ? (html as HTMLAnchorElement).href : undefined;
-        return { role, name, tag, selectorHint, href };
+        const inputType =
+          tag === "input"
+            ? (html as HTMLInputElement).type || "text"
+            : undefined;
+        return { role, name, tag, selectorHint, href, inputType };
       });
     }),
   ]);

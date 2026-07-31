@@ -191,6 +191,10 @@ export const CursorSpeedSchema = z
  * ```json
  * { "action": "type", "description": "Enter email", "startMs": 700, "endMs": 1200, "selector": "#email", "text": "a@b.com", "fill": false }
  * ```
+ * Example upload:
+ * ```json
+ * { "action": "upload", "description": "Attach resume", "startMs": 0, "endMs": 400, "selector": "#file-upload", "files": ["C:/path/to/resume.pdf"] }
+ * ```
  */
 export const OrchestrateActionSchema = z.object({
   action: z.enum([
@@ -204,6 +208,7 @@ export const OrchestrateActionSchema = z.object({
     "navigate",
     "select",
     "hover",
+    "upload",
   ]),
   description: z
     .string()
@@ -228,6 +233,18 @@ export const OrchestrateActionSchema = z.object({
     .optional()
     .describe(
       "If true, locator.fill (instant). For demos leave false/omit so pressSequentially(delay 8) shows live typing. Testing-only: true is fine."
+    ),
+  files: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Absolute or cwd-relative file paths for upload (required when action is upload)"
+    ),
+  useFileChooser: z
+    .boolean()
+    .optional()
+    .describe(
+      "If true, click selector and set files via the FileChooser event. Default false: locator.setInputFiles (works on hidden inputs)."
     ),
   narration: z
     .string()

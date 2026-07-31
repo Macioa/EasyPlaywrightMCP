@@ -121,6 +121,20 @@ describe("Zod schemas", () => {
       ],
     });
   });
+
+  it("parses upload action with files", () => {
+    const a = OrchestrateActionSchema.parse({
+      action: "upload",
+      description: "Attach file",
+      startMs: 0,
+      endMs: 400,
+      selector: "#file-upload",
+      files: ["C:/tmp/sample.txt"],
+      useFileChooser: false,
+    });
+    expect(a.files).toEqual(["C:/tmp/sample.txt"]);
+    expect(a.useFileChooser).toBe(false);
+  });
 });
 
 describe("login strategies", () => {
@@ -525,6 +539,100 @@ describe("session lifecycle + orchestrate", () => {
       fs.unlinkSync(tmpMd);
     } finally {
       await fx.close();
+    }
+  });
+
+  it("upload attaches files via setInputFiles and filechooser", async () => {
+    const fixturePath = path.join(os.tmpdir(), `epm-upload-${Date.now()}.txt`);
+    fs.writeFileSync(fixturePath, "upload test payload", "utf8");
+    const fx = await startFixtureServer((_url, _req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body>
+        <form id="f">
+          <input type="file" id="file-upload" name="file" />
+          <button type="button" id="file-submit">Upload</button>
+        </form>
+        <div id="uploaded-files"></div>
+        <script>
+          document.getElementById('file-submit').onclick = () => {
+            const input = document.getElementById('file-upload');
+            const name = input.files && input.files[0] ? input.files[0].name : '';
+            document.getElementById('uploaded-files').textContent = name;
+          };
+        </script>
+      </body></html>`);
+    });
+    try {
+      const started = await sessionManager.start({
+        startUrl: fx.baseUrl,
+        headed: false,
+      });
+      const session = sessionManager.get(started.sessionId);
+
+      const { querySessionPage } = await import("../src/session/query.js");
+      const pageData = await querySessionPage(started.sessionId, session.page);
+      const fileInput = pageData.interactive.find((c) => c.selectorHint === "#file-upload");
+      expect(fileInput?.inputType).toBe("file");
+
+      const results = await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "upload",
+            description: "Attach sample file",
+            startMs: 0,
+            endMs: 200,
+            selector: "#file-upload",
+            files: [fixturePath],
+          },
+          {
+            action: "click",
+            description: "Submit upload",
+            startMs: 200,
+            endMs: 400,
+            selector: "#file-submit",
+            speed: "fast",
+          },
+        ],
+      });
+      expect(results.every((r) => r.ok)).toBe(true);
+      const uploaded = await session.page.locator("#uploaded-files").innerText();
+      expect(uploaded).toContain(path.basename(fixturePath));
+
+      await session.page.locator("#file-upload").setInputFiles([]);
+      await session.page.locator("#uploaded-files").evaluate((el) => {
+        el.textContent = "";
+      });
+      const chooserResults = await orchestrateSession(session, {
+        sessionId: started.sessionId,
+        commands: [
+          {
+            action: "upload",
+            description: "Attach via filechooser",
+            startMs: 0,
+            endMs: 200,
+            selector: "#file-upload",
+            files: [fixturePath],
+            useFileChooser: true,
+          },
+          {
+            action: "click",
+            description: "Submit upload again",
+            startMs: 200,
+            endMs: 400,
+            selector: "#file-submit",
+            speed: "fast",
+          },
+        ],
+      });
+      expect(chooserResults.every((r) => r.ok)).toBe(true);
+      const uploaded2 = await session.page.locator("#uploaded-files").innerText();
+      expect(uploaded2).toContain(path.basename(fixturePath));
+
+      await sessionManager.end(started.sessionId);
+    } finally {
+      await fx.close();
+      fs.unlinkSync(fixturePath);
     }
   });
 

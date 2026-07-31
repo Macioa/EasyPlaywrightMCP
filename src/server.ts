@@ -164,11 +164,12 @@ Example: { "sessionId": "sess_01HXYZ" }`,
 
   server.tool(
     "orchestrate_session",
-    `Execute ordered tap/cursor/keyboard actions.
+    `Execute ordered tap/cursor/keyboard/upload actions.
 Recording/demoMode: server synthesizes TTS from narration|description, runs the action, holds until VO ends.
 startMs/endMs are ignored for pacing while recording (placeholders OK). fill=false for live typing.
 Testing (no recording): startMs/endMs pace the batch; each call clock starts near 0.
 Optional recordStepsPath writes an MD log. Recording also writes sibling .cues.json.
+upload: pass files (paths) + selector for input[type=file]; useFileChooser:true clicks then FileChooser.setFiles.
 
 Example (demo):
 \`\`\`json
@@ -192,6 +193,14 @@ Example (demo):
       "selector": "input[type=search]",
       "text": "billing",
       "fill": false
+    },
+    {
+      "action": "upload",
+      "description": "Attach the resume PDF",
+      "startMs": 0,
+      "endMs": 1000,
+      "selector": "#file-upload",
+      "files": ["C:/path/to/resume.pdf"]
     }
   ]
 }
