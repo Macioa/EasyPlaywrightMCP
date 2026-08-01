@@ -1,16 +1,14 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { installHint, resolveEdgeTts } from "../platform/tools.js";
 import type { NarrationCue } from "../types/schemas.js";
 import { runFfmpeg, runFfprobeDuration } from "./convert.js";
 
 const LEAD_IN = 0.35;
 
 export function hasEdgeTts(): boolean {
-  const r = spawnSync("python", ["-m", "edge_tts", "--help"], {
-    encoding: "utf8",
-  });
-  return r.status === 0;
+  return resolveEdgeTts() !== null;
 }
 
 export function synthesizeLine(
@@ -19,11 +17,16 @@ export function synthesizeLine(
   voice: string,
   rate: string
 ): void {
+  const edge = resolveEdgeTts();
+  if (!edge) {
+    throw new Error(
+      `edge-tts not available. Run: ${installHint("edge-tts")}`
+    );
+  }
   const r = spawnSync(
-    "python",
+    edge.python,
     [
-      "-m",
-      "edge_tts",
+      ...edge.moduleArgs,
       "--voice",
       voice,
       "--rate",

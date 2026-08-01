@@ -30,4 +30,4 @@ npm run build
 ## Prerequisites
 
 - Node 20+ on PATH for the `node` command Claude launches
-- `ffmpeg` / `ffprobe` and `edge-tts` for demo compilation
+- Platform A/V tools — see [platform-tools.md](platform-tools.md) (`ffmpeg` / `ffprobe`, Python + `edge-tts`)

@@ -1,7 +1,18 @@
 import { spawnSync } from "node:child_process";
+import {
+  installHint,
+  resolveBinary,
+  type BinaryToolId,
+} from "../platform/tools.js";
 
 export function runFfmpeg(args: string[]): void {
-  const r = spawnSync("ffmpeg", ["-y", ...args], {
+  const bin = resolveBinary("ffmpeg");
+  if (!bin) {
+    throw new Error(
+      `ffmpeg not on PATH. Install: ${installHint("ffmpeg")}.`
+    );
+  }
+  const r = spawnSync(bin.command, ["-y", ...args], {
     encoding: "utf8",
     // Ensure child can resolve fonts when callers pass fontfile under the package.
     env: process.env,
@@ -13,8 +24,14 @@ export function runFfmpeg(args: string[]): void {
 }
 
 export function runFfprobeDuration(file: string): number {
+  const bin = resolveBinary("ffprobe");
+  if (!bin) {
+    throw new Error(
+      `ffprobe not on PATH. Install: ${installHint("ffprobe")}.`
+    );
+  }
   const r = spawnSync(
-    "ffprobe",
+    bin.command,
     [
       "-v",
       "error",
@@ -33,6 +50,9 @@ export function runFfprobeDuration(file: string): number {
 }
 
 export function hasBinary(name: string): boolean {
+  if (name === "ffmpeg" || name === "ffprobe") {
+    return resolveBinary(name as BinaryToolId) !== null;
+  }
   const r = spawnSync(name, ["-version"], { encoding: "utf8" });
   return r.status === 0;
 }

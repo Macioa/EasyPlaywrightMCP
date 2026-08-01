@@ -10,6 +10,7 @@ import type {
   NarrationCue,
 } from "../types/schemas.js";
 import { burnCaptions } from "./captions.js";
+import { installHint } from "../platform/tools.js";
 import { convertVideo, hasBinary, runFfprobeDuration } from "./convert.js";
 import { recordSlate } from "./slate.js";
 import { spliceVideos } from "./splice.js";
@@ -44,15 +45,13 @@ export async function compileDemo(
   if (!hasBinary("ffmpeg") || !hasBinary("ffprobe")) {
     return {
       ok: false,
-      reason:
-        "ffmpeg/ffprobe not on PATH. Install Gyan.FFmpeg (winget install Gyan.FFmpeg).",
+      reason: `ffmpeg/ffprobe not on PATH. Install: ${installHint("ffmpeg")}.`,
     };
   }
   if (!hasEdgeTts()) {
     return {
       ok: false,
-      reason:
-        "edge-tts not available. Run: python -m pip install edge-tts",
+      reason: `edge-tts not available. Run: ${installHint("edge-tts")}`,
     };
   }
 

@@ -1,6 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import {
+  installHint,
+  resolveCaptionFont,
+} from "../platform/tools.js";
 import type { NarrationCue } from "../types/schemas.js";
 import { runFfmpeg } from "./convert.js";
 
@@ -13,38 +14,9 @@ function escapeDrawtext(text: string): string {
     .replace(/\n/g, " ");
 }
 
-/** Package-root assets/fonts (readable even when OS font dirs are sandboxed). */
-function bundledFontCandidates(): string[] {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  // dist/compile → ../../assets/fonts
-  const root = path.resolve(here, "..", "..");
-  return [
-    path.join(root, "assets", "fonts", "arial.ttf"),
-    path.join(root, "assets", "fonts", "DejaVuSans.ttf"),
-  ];
-}
-
 /** Absolute font path for ffmpeg drawtext (prefer bundled; Windows needs fontfile). */
 export function resolveCaptionFontFile(): string | undefined {
-  const system =
-    process.platform === "win32"
-      ? [
-          path.join(process.env.WINDIR ?? "C:\\Windows", "Fonts", "arial.ttf"),
-          path.join(process.env.WINDIR ?? "C:\\Windows", "Fonts", "segoeui.ttf"),
-          path.join(process.env.WINDIR ?? "C:\\Windows", "Fonts", "calibri.ttf"),
-        ]
-      : process.platform === "darwin"
-        ? [
-            "/System/Library/Fonts/Supplemental/Arial.ttf",
-            "/Library/Fonts/Arial.ttf",
-            "/System/Library/Fonts/Helvetica.ttc",
-          ]
-        : [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans.ttf",
-          ];
-  return [...bundledFontCandidates(), ...system].find((p) => fs.existsSync(p));
+  return resolveCaptionFont();
 }
 
 function escapeFontFile(fontPath: string): string {
@@ -81,9 +53,7 @@ export function burnCaptions(
     return;
   }
   if (!resolveCaptionFontFile()) {
-    throw new Error(
-      "No caption font found. Add assets/fonts/arial.ttf or install a system TTF (Arial/DejaVu)."
-    );
+    throw new Error(`No caption font found. ${installHint("caption-font")}`);
   }
   runFfmpeg([
     "-i",

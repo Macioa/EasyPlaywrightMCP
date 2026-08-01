@@ -175,8 +175,7 @@ Use when the user must log in in their own browser. **Always** (Google OAuth / S
 ## Prerequisites
 
 - Node 20+
-- `ffmpeg` / `ffprobe` on PATH (Gyan build: `winget install Gyan.FFmpeg`)
-- `python -m pip install edge-tts`
+- Platform A/V tools — see [docs/platform-tools.md](docs/platform-tools.md) (`ffmpeg` / `ffprobe`, Python + `edge-tts`; Windows: winget, macOS: brew)
 - Chromium via `npx playwright install chromium` (runs on `npm install`)
 
 ## Install
@@ -198,4 +197,4 @@ npm test
 npm run typecheck
 ```
 
-Auth profiles and scratch files live under `%USERPROFILE%\.easy-playwright-mcp\`.
+Auth profiles and scratch files live under `~/.easy-playwright-mcp/` (`%USERPROFILE%\.easy-playwright-mcp\` on Windows).

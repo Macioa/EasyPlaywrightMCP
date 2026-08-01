@@ -32,5 +32,4 @@ Typical config paths:
 
 ## Prerequisites
 
-- `ffmpeg` / `ffprobe` on PATH (`winget install Gyan.FFmpeg`)
-- `python -m pip install edge-tts` (for `compile_demo`)
+- Platform A/V tools — see [platform-tools.md](platform-tools.md) (`ffmpeg` / `ffprobe`, Python + `edge-tts`)
